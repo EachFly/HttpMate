@@ -5,6 +5,7 @@
     <vendor>jeraxxxxxxx</vendor>
 
     <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.java</depends>
 
     <resource-bundle>messages.MyBundle</resource-bundle>
 
@@ -12,4 +13,12 @@
         <toolWindow factoryClass="com.github.jeraxxxxxxx.httpmate.toolWindow.MyToolWindowFactory" id="MyToolWindow"/>
         <postStartupActivity implementation="com.github.jeraxxxxxxx.httpmate.startup.MyProjectActivity" />
     </extensions>
+    <actions>
+        <action id="com.github.jeraxxxxxxx.httpmate.actions.RestApiSearchAction"
+                class="com.github.jeraxxxxxxx.httpmate.actions.RestApiSearchAction"
+                text="Search REST APIs"
+                description="Search for REST APIs in the project">
+            <keyboard-shortcut keymap="$default" first-keystroke="alt OR_BAR"/>
+        </action>
+    </actions>
 </idea-plugin>
