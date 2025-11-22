@@ -19,6 +19,8 @@
                 text="Search REST APIs"
                 description="Search for REST APIs in the project">
             <keyboard-shortcut keymap="$default" first-keystroke="alt OR_BAR"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt H"/>
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
     </actions>
 </idea-plugin>
