@@ -134,6 +134,16 @@ tasks {
     publishPlugin {
         dependsOn(patchChangelog)
     }
+
+    runIde {
+        jvmArgs(
+            "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang=ALL-UNNAMED",
+            "--add-opens=java.base/java.util=ALL-UNNAMED",
+            "--add-opens=java.base/java.io=ALL-UNNAMED",
+            "--add-opens=java.base/java.nio=ALL-UNNAMED"
+        )
+    }
 }
 
 intellijPlatformTesting {
@@ -146,6 +156,9 @@ intellijPlatformTesting {
                         "-Dide.mac.message.dialogs.as.sheets=false",
                         "-Djb.privacy.policy.text=<!--999.999-->",
                         "-Djb.consents.confirmation.enabled=false",
+                        "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+                        "--add-opens=java.base/java.lang=ALL-UNNAMED",
+                        "-Djava.util.concurrent.ForkJoinPool.common.threadFactory=java.util.concurrent.Executors\$DefaultThreadFactory"
                     )
                 }
             }
