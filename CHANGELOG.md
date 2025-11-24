@@ -2,6 +2,23 @@
 
 # HttpMate Changelog
 
+## [0.0.2] - 2025-11-24
+
+### Added / 新增
+
+- **Search Highlighting / 搜索高亮**:
+  - Keywords in search results are now highlighted in **bold blue** for easier identification.
+  - 搜索结果中的关键词现在会以**蓝色粗体**高亮显示，便于快速识别。
+- **Dialog Size Persistence / 弹窗尺寸记忆**:
+  - The plugin now remembers the size of the search dialog after you resize it.
+  - 插件现在会记住你调整后的搜索弹窗大小。
+
+### Fixed / 修复
+
+- **JAX-RS Support / JAX-RS 支持**:
+  - Fixed an issue where JAX-RS methods were incorrectly identified as "ALL". Now correctly parses `@GET`, `@POST`, etc.
+  - 修复了 JAX-RS 方法被错误识别为 "ALL" 的问题。现在能正确解析 `@GET`, `@POST` 等注解。
+
 ## [0.0.1] - 2025-11-23
 
 ### Added / 新增

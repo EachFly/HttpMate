@@ -26,11 +26,16 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
     private val listModel = javax.swing.DefaultListModel<RestApiItem>()
     private val list = JBList(listModel)
     private val searchField = SearchTextField()
+    private var currentQuery: String = ""
 
     init {
         init()
         title = "Search REST APIs"
         updateList(allItems)
+    }
+
+    override fun getDimensionServiceKey(): String? {
+        return "HttpMate.RestApiSearchDialog"
     }
 
     override fun createCenterPanel(): JComponent {
@@ -71,13 +76,42 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
                 selected: Boolean,
                 hasFocus: Boolean
             ) {
-                append(value.method, SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES)
-                append(" " + value.path, SimpleTextAttributes.REGULAR_ATTRIBUTES)
+                appendHighlighted(value.method, currentQuery, SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES)
+                append(" ")
+                appendHighlighted(value.path, currentQuery, SimpleTextAttributes.REGULAR_ATTRIBUTES)
+                
                 val psiFile = value.element.containingFile
                 if (psiFile != null) {
                      append(" (" + psiFile.name + ")", SimpleTextAttributes.GRAY_ATTRIBUTES)
                 }
                 icon = value.icon
+            }
+
+            private val HIGHLIGHT_ATTRIBUTES = SimpleTextAttributes(SimpleTextAttributes.STYLE_BOLD, com.intellij.ui.JBColor.BLUE)
+
+            private fun appendHighlighted(text: String, query: String, baseAttributes: SimpleTextAttributes) {
+                if (query.isEmpty()) {
+                    append(text, baseAttributes)
+                    return
+                }
+
+                val lowerText = text.lowercase()
+                val lowerQuery = query.lowercase()
+                var start = 0
+                var index = lowerText.indexOf(lowerQuery, start)
+
+                while (index != -1) {
+                    if (index > start) {
+                        append(text.substring(start, index), baseAttributes)
+                    }
+                    append(text.substring(index, index + query.length), HIGHLIGHT_ATTRIBUTES)
+                    start = index + query.length
+                    index = lowerText.indexOf(lowerQuery, start)
+                }
+
+                if (start < text.length) {
+                    append(text.substring(start), baseAttributes)
+                }
             }
         }
         
@@ -103,7 +137,8 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
     }
 
     private fun filter(text: String) {
-        val query = text.trim().lowercase()
+        currentQuery = text.trim()
+        val query = currentQuery.lowercase()
         val filtered = if (query.isEmpty()) {
             allItems
         } else {
@@ -113,6 +148,7 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
             }
         }
         updateList(filtered)
+        list.repaint() // Force repaint to update highlighting
     }
 
     private fun updateList(items: List<RestApiItem>) {
