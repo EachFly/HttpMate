@@ -2,6 +2,16 @@
 
 # HttpMate Changelog
 
+## [0.0.3] - 2025-11-24
+
+### Added / 新增
+
+- **JSON Generation / JSON 生成**:
+  - Added "Http-Mate Generate JSON" action to the right-click menu in the editor and project view.
+  - 在编辑器和项目视图的右键菜单中添加了 "Http-Mate Generate JSON" 选项。
+  - Generates a JSON file for the selected class in the `http-mate/` directory.
+  - 在 `http-mate/` 目录下为选中的类生成 JSON 文件。
+
 ## [0.0.2] - 2025-11-24
 
 ### Added / 新增

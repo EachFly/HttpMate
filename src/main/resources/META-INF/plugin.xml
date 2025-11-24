@@ -20,5 +20,12 @@
             <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt H"/>
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
-    </actions>
+      <action id="com.github.jeraxxxxxxx.httpmate.actions.GenerateJsonAction"
+            class="com.github.jeraxxxxxxx.httpmate.actions.GenerateJsonAction"
+            text="Http-Mate Generate JSON"
+            description="Generate JSON for the selected class">
+      <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+      <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+    </action>
+  </actions>
 </idea-plugin>
