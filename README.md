@@ -11,23 +11,15 @@
 
 ## Features / 功能特性
 
-- **Quick Search / 快速搜索**:
-  - Press `Alt + |` (or `Ctrl + Alt + H`) to open the search dialog.
-  - 按下 `Alt + |` (或 `Ctrl + Alt + H`) 打开搜索对话框。
-- **Framework Support / 框架支持**:
-  - Supports Spring MVC (`@RequestMapping`, `@GetMapping`, etc.) and JAX-RS (`@Path`, `@GET`, etc.).
-  - 支持 Spring MVC (`@RequestMapping`, `@GetMapping` 等) 和 JAX-RS (`@Path`, `@GET` 等)。
-- **Robust Scanning / 鲁棒扫描**:
-  - **PSI Scanning**: Accurate parsing based on IntelliJ's index.
-  - **Fallback Scanning**: Regex-based scanning ensures APIs are found even if the project has compilation errors (red code).
-  - **PSI 扫描**: 基于 IntelliJ 索引的精准解析。
-  - **后备扫描**: 基于正则的文本扫描，确保即使项目代码爆红（编译错误）也能找到 API。
-- **Visual Feedback / 视觉反馈**:
-  - Colored icons for different HTTP methods (GET, POST, DELETE, etc.).
-  - 为不同的 HTTP 方法（GET, POST, DELETE 等）提供彩色图标区分。
-- **Navigation / 快速导航**:
-  - Press `Enter` to jump directly to the API definition in the code.
-  - 按 `Enter` 键直接跳转到代码中的 API 定义处。
+- **REST API Search / 接口搜索**:
+  - `Alt + |` (or `Ctrl + Alt + H`) to search Spring Boot & JAX-RS APIs.
+  - `Alt + |` (或 `Ctrl + Alt + H`) 快速搜索 Spring Boot 和 JAX-RS 接口。
+- **JSON Generation / JSON 生成**:
+  - Right-click on a class -> "Http-Mate Generate JSON" to generate data file.
+  - 右键点击类名 -> "Http-Mate Generate JSON" 生成对应的 JSON 数据文件。
+- **Smart Navigation / 智能跳转**:
+  - Press `Enter` to jump to code definition.
+  - 按 `Enter` 键直接跳转到代码定义处。
 <!-- Plugin description end -->
 
 ---

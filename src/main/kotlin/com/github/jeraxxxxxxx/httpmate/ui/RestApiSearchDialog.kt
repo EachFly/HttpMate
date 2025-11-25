@@ -28,6 +28,9 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
     private val searchField = SearchTextField()
     private var currentQuery: String = ""
 
+    private val searchAlarm = com.intellij.util.Alarm(com.intellij.util.Alarm.ThreadToUse.POOLED_THREAD, disposable)
+    private val statusLabel = javax.swing.JLabel()
+
     init {
         init()
         title = "Search REST APIs"
@@ -60,6 +63,8 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
                 } else if (e.keyCode == KeyEvent.VK_DOWN) {
                     list.requestFocus()
                     if (listModel.size > 0) list.selectedIndex = 0
+                } else if (e.keyCode == KeyEvent.VK_ESCAPE) {
+                    doCancelAction()
                 }
             }
         })
@@ -132,23 +137,35 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
         })
 
         panel.add(JBScrollPane(list), BorderLayout.CENTER)
+        
+        // Status Label
+        statusLabel.border = javax.swing.BorderFactory.createEmptyBorder(2, 5, 2, 5)
+        panel.add(statusLabel, BorderLayout.SOUTH)
 
         return panel
     }
 
     private fun filter(text: String) {
-        currentQuery = text.trim()
-        val query = currentQuery.lowercase()
-        val filtered = if (query.isEmpty()) {
-            allItems
-        } else {
-            allItems.filter { 
-                it.path.lowercase().contains(query) || 
-                it.method.lowercase().contains(query) 
+        searchAlarm.cancelAllRequests()
+        searchAlarm.addRequest({
+            val query = text.trim().lowercase()
+            val filtered = if (query.isEmpty()) {
+                allItems
+            } else {
+                allItems.filter { 
+                    it.path.lowercase().contains(query) || 
+                    it.method.lowercase().contains(query) 
+                }
             }
-        }
-        updateList(filtered)
-        list.repaint() // Force repaint to update highlighting
+            
+            com.intellij.openapi.application.ApplicationManager.getApplication().invokeLater({
+                if (!isDisposed) {
+                    currentQuery = text.trim()
+                    updateList(filtered)
+                    list.repaint()
+                }
+            }, com.intellij.openapi.application.ModalityState.stateForComponent(list))
+        }, 300)
     }
 
     private fun updateList(items: List<RestApiItem>) {
@@ -157,6 +174,7 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
         if (items.isNotEmpty()) {
             list.selectedIndex = 0
         }
+        statusLabel.text = "Found: ${items.size} / Total: ${allItems.size}"
     }
 
     override fun doOKAction() {

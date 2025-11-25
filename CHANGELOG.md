@@ -2,15 +2,44 @@
 
 # HttpMate Changelog
 
+## [0.0.4] - 2025-11-25
+
+### Added / 新增
+
+- **JSON Generation / JSON 生成**:
+  - Added "Http-Mate Generate JSON" action to generate JSON files for Java classes.
+  - 添加了 "Http-Mate Generate JSON" 功能，可为 Java 类生成 JSON 文件。
+- **API Count Display / API 数量显示**:
+  - Added a status label showing found/total API count in the search dialog.
+  - 在搜索弹窗中添加了 API 数量统计显示。
+
+### Improved / 优化
+
+- **Search Performance / 搜索性能**:
+  - Implemented debounce and asynchronous filtering for smoother search experience.
+  - 实现了防抖和异步过滤，搜索体验更流畅。
+- **User Experience / 用户体验**:
+  - Supported `ESC` key to close the search dialog.
+  - 支持使用 `ESC` 键关闭搜索弹窗。
+
+### Fixed / 修复
+
+- **JSON Generation Logic / JSON 生成逻辑**:
+  - Fixed primitive types (e.g., Integer) generating as objects.
+  - 修复了基本类型生成为对象的问题。
+  - Fixed Date/Time formatting to use current time string.
+  - 修复了日期时间格式化问题，现在生成当前时间字符串。
+- **Search Functionality / 搜索功能**:
+  - Fixed search result updates in modal dialogs.
+  - 修复了模态弹窗中搜索结果更新的问题。
+
 ## [0.0.3] - 2025-11-24
 
 ### Added / 新增
 
 - **JSON Generation / JSON 生成**:
-  - Added "Http-Mate Generate JSON" action to the right-click menu in the editor and project view.
-  - 在编辑器和项目视图的右键菜单中添加了 "Http-Mate Generate JSON" 选项。
-  - Generates a JSON file for the selected class in the `http-mate/` directory.
-  - 在 `http-mate/` 目录下为选中的类生成 JSON 文件。
+  - Added "Http-Mate Generate JSON" action.
+  - 添加了 "Http-Mate Generate JSON" 功能。
 
 ## [0.0.2] - 2025-11-24
 

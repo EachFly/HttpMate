@@ -72,7 +72,25 @@ class GenerateJsonAction : AnAction() {
         }
 
         val canonicalText = type.canonicalText
+        // Handle String
         if (canonicalText == "java.lang.String") return "\"\""
+        
+        // Handle Boxed Primitives
+        if (canonicalText == "java.lang.Integer" || canonicalText == "java.lang.Long" || 
+            canonicalText == "java.lang.Short" || canonicalText == "java.lang.Byte") return "0"
+        if (canonicalText == "java.lang.Double" || canonicalText == "java.lang.Float") return "0.0"
+        if (canonicalText == "java.lang.Boolean") return "false"
+
+        // Handle Date and Time
+        if (canonicalText == "java.util.Date" || canonicalText == "java.sql.Date" || 
+            canonicalText == "java.sql.Timestamp" || canonicalText == "java.time.LocalDateTime" ||
+            canonicalText == "java.time.LocalDate" || canonicalText == "java.time.LocalTime" ||
+            canonicalText == "java.time.ZonedDateTime") {
+            val now = java.time.LocalDateTime.now()
+            val formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+            return "\"${now.format(formatter)}\""
+        }
+
         if (canonicalText.startsWith("java.util.List") || canonicalText.startsWith("java.util.Set") || type is PsiArrayType) return "[]"
         if (canonicalText.startsWith("java.util.Map")) return "{}"
 
