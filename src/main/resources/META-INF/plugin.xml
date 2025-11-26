@@ -27,5 +27,12 @@
       <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
       <add-to-group group-id="EditorPopupMenu" anchor="last"/>
     </action>
+    <action id="com.github.jeraxxxxxxx.httpmate.actions.GenerateMockJsonAction"
+            class="com.github.jeraxxxxxxx.httpmate.actions.GenerateMockJsonAction"
+            text="Http-Mate Generate Mock JSON"
+            description="Generate JSON with mock data for the selected class">
+      <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+      <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+    </action>
   </actions>
 </idea-plugin>

@@ -1,10 +1,10 @@
 package com.github.jeraxxxxxxx.httpmate.actions
 
-import com.github.jeraxxxxxxx.httpmate.generator.DefaultJsonGenerator
 import com.github.jeraxxxxxxx.httpmate.generator.JsonGenerator
+import com.github.jeraxxxxxxx.httpmate.generator.MockJsonGenerator
 
-class GenerateJsonAction : BaseGenerateJsonAction() {
+class GenerateMockJsonAction : BaseGenerateJsonAction() {
     override fun getGenerator(): JsonGenerator {
-        return DefaultJsonGenerator()
+        return MockJsonGenerator()
     }
 }

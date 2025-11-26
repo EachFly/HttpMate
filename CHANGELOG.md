@@ -2,6 +2,14 @@
 
 # HttpMate Changelog
 
+## [0.0.6] - 2025-11-26
+
+### Added / 新增
+
+- **Mock JSON Generation / Mock JSON 生成**:
+  - Added "Http-Mate Generate Mock JSON" action to generate JSON with random test data (Strings, Numbers, Dates, Collections).
+  - 添加了 "Http-Mate Generate Mock JSON" 功能，可生成包含随机测试数据的 JSON 文件。
+
 ## [0.0.5] - 2025-11-26
 
 ### Improved / 优化
