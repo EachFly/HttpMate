@@ -78,7 +78,8 @@ class GenerateJsonAction : AnAction() {
         // Handle Boxed Primitives
         if (canonicalText == "java.lang.Integer" || canonicalText == "java.lang.Long" || 
             canonicalText == "java.lang.Short" || canonicalText == "java.lang.Byte") return "0"
-        if (canonicalText == "java.lang.Double" || canonicalText == "java.lang.Float") return "0.0"
+        if (canonicalText == "java.lang.Double" || canonicalText == "java.lang.Float" ||
+            canonicalText == "java.math.BigDecimal") return "0.0"
         if (canonicalText == "java.lang.Boolean") return "false"
 
         // Handle Date and Time

@@ -2,6 +2,23 @@
 
 # HttpMate Changelog
 
+## [0.0.5] - 2025-11-26
+
+### Improved / 优化
+
+- **Search Performance / 搜索性能**:
+  - Limited search results to top 50 items to prevent UI lag with large datasets (e.g., 1000+ APIs).
+  - 限制搜索结果仅显示前 50 条，以解决大量数据下的 UI 卡顿问题。
+- **User Experience / 用户体验**:
+  - Typing in the search list now automatically refocuses to the search field.
+  - 在搜索结果列表中输入字符会自动将焦点切回搜索框。
+
+### Fixed / 修复
+
+- **JSON Generation / JSON 生成**:
+  - Fixed `BigDecimal` generating as an object. Now generates as a number (e.g., `0.0`).
+  - 修复了 `BigDecimal` 生成为对象的问题，现在生成为数字类型（如 `0.0`）。
+
 ## [0.0.4] - 2025-11-25
 
 ### Added / 新增

@@ -132,6 +132,21 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
             override fun keyPressed(e: KeyEvent) {
                 if (e.keyCode == KeyEvent.VK_ENTER) {
                     doOKAction()
+                } else if (e.keyCode == KeyEvent.VK_BACK_SPACE) {
+                    searchField.requestFocus()
+                    val text = searchField.text
+                    if (text.isNotEmpty()) {
+                        searchField.text = text.substring(0, text.length - 1)
+                    }
+                    e.consume()
+                }
+            }
+            
+            override fun keyTyped(e: KeyEvent) {
+                if (!Character.isISOControl(e.keyChar) && e.keyChar != KeyEvent.CHAR_UNDEFINED) {
+                    searchField.requestFocus()
+                    searchField.text += e.keyChar
+                    e.consume()
                 }
             }
         })
@@ -170,11 +185,19 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
 
     private fun updateList(items: List<RestApiItem>) {
         listModel.clear()
-        items.forEach { listModel.addElement(it) }
+        val limit = 50
+        items.take(limit).forEach { listModel.addElement(it) }
+        
         if (items.isNotEmpty()) {
             list.selectedIndex = 0
         }
-        statusLabel.text = "Found: ${items.size} / Total: ${allItems.size}"
+        
+        val countText = if (items.size > limit) {
+            "Found: ${items.size} (Showing top $limit) / Total: ${allItems.size}"
+        } else {
+            "Found: ${items.size} / Total: ${allItems.size}"
+        }
+        statusLabel.text = countText
     }
 
     override fun doOKAction() {
