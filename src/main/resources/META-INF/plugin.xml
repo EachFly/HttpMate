@@ -2,7 +2,8 @@
 <idea-plugin>
     <id>com.github.jeraxxxxxxx.httpmate</id>
     <name>HttpMate</name>
-    <vendor>jeraxxxxxxx</vendor>
+    <vendor url="https://github.com/EachFly/HttpMate">jeraxxxxxxx</vendor>
+    <url>https://github.com/EachFly/HttpMate</url>
 
     <depends>com.intellij.modules.platform</depends>
     <depends>com.intellij.java</depends>

@@ -1,5 +1,9 @@
 # HttpMate
 
+<p align="center">
+  <img src="docs/images/logo.png" alt="HttpMate Logo" width="128" height="128" />
+</p>
+
 ![Build](https://github.com/EachFly/HttpMate/workflows/Build/badge.svg)
 
 <!-- Plugin description -->

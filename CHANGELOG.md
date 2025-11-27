@@ -1,6 +1,18 @@
-<!-- Keep a Changelog guide -> https://keepachangelog.com -->
-
 # HttpMate Changelog
+
+## [0.0.7] - 2025-11-27
+
+### Added / 新增
+
+- **Plugin Icon / 插件图标**:
+  - Added a brand new plugin icon and logo (resized to standard 40x40/80x80).
+  - 添加了全新的插件图标和 Logo（已调整为标准的 40x40/80x80 尺寸）。
+
+### Fixed / 修复
+
+- **Metadata / 元数据**:
+  - Added project URL to the plugin overview.
+  - 在插件概览中添加了项目地址。
 
 ## [0.0.6] - 2025-11-26
 
