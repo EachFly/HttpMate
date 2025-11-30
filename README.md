@@ -21,12 +21,14 @@
 - **JSON Generation / JSON 生成**:
   - Right-click on a class -> "Http-Mate Generate JSON" to generate data file.
   - 右键点击类名 -> "Http-Mate Generate JSON" 生成对应的 JSON 数据文件。
+- **API Documentation / 接口文档生成**:
+  - Right-click on a method or class -> "Http-Mate Generate API Doc" to generate Markdown documentation.
+  - 右键点击方法或类名 -> "Http-Mate Generate API Doc" 生成 Markdown 格式的接口文档。
+  - 📖 [查看详细功能指南](docs/API_DOCUMENTATION_GUIDE.md)
 - **Smart Navigation / 智能跳转**:
   - Press `Enter` to jump to code definition.
   - 按 `Enter` 键直接跳转到代码定义处。
 <!-- Plugin description end -->
-
----
 
 ## Development & Debugging / 开发与调试
 

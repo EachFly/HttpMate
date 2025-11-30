@@ -57,31 +57,27 @@ intellijPlatform {
         name = providers.gradleProperty("pluginName")
         version = providers.gradleProperty("pluginVersion")
 
-        // Extract the <!-- Plugin description --> section from README.md and provide for the plugin's manifest
-        description = providers.fileContents(layout.projectDirectory.file("README.md")).asText.map {
-            val start = "<!-- Plugin description -->"
-            val end = "<!-- Plugin description end -->"
-
-            with(it.lines()) {
-                if (!containsAll(listOf(start, end))) {
-                    throw GradleException("Plugin description section not found in README.md:\n$start ... $end")
-                }
-                subList(indexOf(start) + 1, indexOf(end)).joinToString("\n").let(::markdownToHTML)
-            }
-        }
+        // Hardcoded description to avoid encoding issues
+        description = """
+            <p><strong>HttpMate</strong> is a powerful IntelliJ IDEA plugin designed to help developers quickly search and navigate to REST APIs within their projects. It supports Spring Boot and JAX-RS frameworks, offering a seamless experience similar to "Search Everywhere".</p>
+            <br/>
+            <h2>Features</h2>
+            <ul>
+                <li><strong>REST API Search</strong>: <code>Alt + |</code> (or <code>Ctrl + Alt + H</code>) to search Spring Boot & JAX-RS APIs.</li>
+                <li><strong>JSON Generation</strong>: Right-click on a class -> "Http-Mate Generate JSON" to generate data file.</li>
+                <li><strong>API Documentation</strong>: Right-click on a method -> "Http-Mate Generate API Doc" to generate Markdown docs.</li>
+                <li><strong>Smart Navigation</strong>: Press <code>Enter</code> to jump to code definition.</li>
+            </ul>
+        """.trimIndent()
 
         val changelog = project.changelog // local variable for configuration cache compatibility
-        // Get the latest available change notes from the changelog file
-        changeNotes = providers.gradleProperty("pluginVersion").map { pluginVersion ->
-            with(changelog) {
-                renderItem(
-                    (getOrNull(pluginVersion) ?: getUnreleased())
-                        .withHeader(false)
-                        .withEmptySections(false),
-                    Changelog.OutputType.HTML,
-                )
-            }
-        }
+        // Hardcoded change notes for 0.0.8
+        changeNotes = """
+            <h3>Added</h3>
+            <ul>
+                <li><strong>API Documentation</strong>: Added "Http-Mate Generate API Doc" action to generate Markdown documentation for Controller methods.</li>
+            </ul>
+        """.trimIndent()
 
         ideaVersion {
             sinceBuild = providers.gradleProperty("pluginSinceBuild")
@@ -137,11 +133,21 @@ tasks {
 
     runIde {
         jvmArgs(
+            // 模块访问权限
             "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
             "--add-opens=java.base/java.lang=ALL-UNNAMED",
             "--add-opens=java.base/java.util=ALL-UNNAMED",
             "--add-opens=java.base/java.io=ALL-UNNAMED",
-            "--add-opens=java.base/java.nio=ALL-UNNAMED"
+            "--add-opens=java.base/java.nio=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+            "--add-opens=java.base/java.text=ALL-UNNAMED",
+            "--add-opens=java.desktop/java.awt.font=ALL-UNNAMED",
+            // 针对 JDK 21 的安全配置
+            "-Djava.security.manager=allow",
+            // 禁用安全管理器以避免 setContextClassLoader 错误
+            "-Djava.security.policy=",
+            // 配置线程工厂
+            "-Djava.util.concurrent.ForkJoinPool.common.threadFactory=java.util.concurrent.Executors\$DefaultThreadFactory"
         )
     }
 }

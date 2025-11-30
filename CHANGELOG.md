@@ -1,5 +1,13 @@
 # HttpMate Changelog
 
+## [0.0.8] - 2025-11-30
+
+### Added / 新增
+
+- **API Documentation / 接口文档**:
+  - Added "Http-Mate Generate API Doc" action to generate Markdown documentation for Controller methods.
+  - 添加了 "Http-Mate Generate API Doc" 功能，可为 Controller 方法生成 Markdown 格式的接口文档。
+
 ## [0.0.7] - 2025-11-27
 
 ### Added / 新增

@@ -3,7 +3,6 @@
     <id>com.github.jeraxxxxxxx.httpmate</id>
     <name>HttpMate</name>
     <vendor url="https://github.com/EachFly/HttpMate">jeraxxxxxxx</vendor>
-    <url>https://github.com/EachFly/HttpMate</url>
 
     <depends>com.intellij.modules.platform</depends>
     <depends>com.intellij.java</depends>
@@ -33,6 +32,12 @@
             text="Http-Mate Generate Mock JSON"
             description="Generate JSON with mock data for the selected class">
       <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+      <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+    </action>
+    <action id="com.github.jeraxxxxxxx.httpmate.actions.GenerateDocAction"
+            class="com.github.jeraxxxxxxx.httpmate.actions.GenerateDocAction"
+            text="Http-Mate Generate API Doc"
+            description="Generate Markdown documentation for the selected method">
       <add-to-group group-id="EditorPopupMenu" anchor="last"/>
     </action>
   </actions>
