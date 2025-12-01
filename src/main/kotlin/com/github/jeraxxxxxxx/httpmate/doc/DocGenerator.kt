@@ -27,35 +27,43 @@ class DocGenerator {
         sb.append("## 请求参数\n\n")
         val params = method.parameterList.parameters
         if (params.isNotEmpty()) {
+            // 收集所有需要展开的自定义类型
+            val nestedTypes = mutableSetOf<PsiClass>()
+            
+            // 主参数表格
             sb.append("| 参数名称 | 类型 | 必填 | 长度 | 说明 |\n")
             sb.append("| --- | --- | --- | --- | --- |\n")
             params.forEach { param ->
                 val name = param.name
                 val type = param.type
                 val required = isRequired(param)
+                val desc = extractComment(param)
+                val length = extractLengthConstraint(param)
                 
-                // 检查是否是自定义类型(非基本类型、非 Java 标准库类型)
+                sb.append("| $name | ${type.presentableText} | $required | $length | $desc |\n")
+                
+                // 检查是否是自定义类型,如果是则添加到待展开列表
                 val psiClass = PsiTypesUtil.getPsiClass(type)
                 if (psiClass != null && !psiClass.isEnum && !type.canonicalText.startsWith("java.") && !isSimpleType(type)) {
-                    // 如果是自定义类型,展开其字段
-                    val paramDesc = extractComment(param)
-                    val paramLength = extractLengthConstraint(param)
-                    sb.append("| $name | ${type.presentableText} | $required | $paramLength | $paramDesc |\n")
-                    val fields = psiClass.allFields.filter { !it.hasModifierProperty(PsiModifier.STATIC) }
-                    fields.forEach { field ->
-                        val fieldName = "└─ ${field.name}"
-                        val fieldType = field.type.presentableText
-                        val fieldRequired = "否"
-                        val fieldLength = extractFieldLengthConstraint(field)
-                        val fieldDesc = extractFieldComment(field)
-                        sb.append("| $fieldName | $fieldType | $fieldRequired | $fieldLength | $fieldDesc |\n")
-                    }
-                } else {
-                    // 基本类型或 Java 标准类型,直接显示
-                    val desc = extractComment(param)
-                    val length = extractLengthConstraint(param)
-                    sb.append("| $name | ${type.presentableText} | $required | $length | $desc |\n")
+                    nestedTypes.add(psiClass)
                 }
+            }
+            sb.append("\n")
+            
+            // 递归处理嵌套类型,最大深度3层
+            val processedTypes = mutableSetOf<String>()
+            var currentDepth = 0
+            val maxDepth = 3
+            
+            while (nestedTypes.isNotEmpty() && currentDepth < maxDepth) {
+                val typesToProcess = nestedTypes.toList()
+                nestedTypes.clear()
+                
+                typesToProcess.forEach { psiClass ->
+                    generateNestedTypeTable(psiClass, sb, processedTypes, nestedTypes)
+                }
+                
+                currentDepth++
             }
         } else {
             sb.append("无请求参数\n")
@@ -268,5 +276,51 @@ class DocGenerator {
         }
 
         return constraints.joinToString(", ")
+    }
+
+    /**
+     * 为嵌套类型生成独立表格
+     */
+    private fun generateNestedTypeTable(
+        psiClass: PsiClass, 
+        sb: StringBuilder, 
+        processedTypes: MutableSet<String>,
+        nestedTypes: MutableSet<PsiClass>
+    ) {
+        val className = psiClass.qualifiedName ?: psiClass.name ?: return
+        
+        // 避免重复处理同一类型
+        if (processedTypes.contains(className)) return
+        processedTypes.add(className)
+        
+        // 添加类型标题
+        sb.append("**${psiClass.name}**\n\n")
+        
+        // 生成字段表格
+        sb.append("| 字段名称 | 类型 | 必填 | 长度 | 说明 |\n")
+        sb.append("| --- | --- | --- | --- | --- |\n")
+        
+        val fields = psiClass.allFields.filter { !it.hasModifierProperty(PsiModifier.STATIC) }
+        fields.forEach { field ->
+            val fieldName = field.name
+            val fieldType = field.type.presentableText
+            val fieldRequired = "否"
+            val fieldLength = extractFieldLengthConstraint(field)
+            val fieldDesc = extractFieldComment(field)
+            
+            sb.append("| $fieldName | $fieldType | $fieldRequired | $fieldLength | $fieldDesc |\n")
+            
+            // 检查字段类型是否也是自定义类型
+            val fieldPsiClass = PsiTypesUtil.getPsiClass(field.type)
+            if (fieldPsiClass != null && 
+                !fieldPsiClass.isEnum && 
+                !field.type.canonicalText.startsWith("java.") && 
+                !isSimpleType(field.type) &&
+                !processedTypes.contains(fieldPsiClass.qualifiedName ?: fieldPsiClass.name ?: "")) {
+                nestedTypes.add(fieldPsiClass)
+            }
+        }
+        
+        sb.append("\n")
     }
 }

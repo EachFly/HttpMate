@@ -1,5 +1,38 @@
 # HttpMate Changelog
 
+## [0.0.9] - 2025-12-01
+
+### Added / 新增
+
+- **Validation Annotation Support / 验证注解支持**:
+  - Added "Length" column to request parameters table.
+  - 为请求参数表格添加了"长度"列。
+  - Extract length constraints from validation annotations (@Size, @Length, @Min, @Max, @DecimalMin, @DecimalMax, @Pattern).
+  - 从验证注解中提取长度约束信息（@Size, @Length, @Min, @Max, @DecimalMin, @DecimalMax, @Pattern）。
+  - Support both javax.validation and jakarta.validation packages.
+  - 同时支持 javax.validation 和 jakarta.validation 包。
+
+- **Nested Type Independent Tables / 嵌套类型独立表格**:
+  - Nested custom types now display as independent tables instead of tree structure.
+  - 嵌套的自定义类型现在以独立表格形式显示,而不是树形结构。
+  - Support up to 3 levels of nesting with recursive processing.
+  - 支持最多3层嵌套,采用递归处理。
+  - Each nested type has its own table with type name header.
+  - 每个嵌套类型都有独立的表格和类型名称标题。
+
+### Fixed / 修复
+
+- **Duplicate Notifications / 重复通知**:
+  - Fixed duplicate success notifications when generating class-level documentation.
+  - 修复了生成类级别文档时出现两次成功通知的问题。
+  - Now shows single notification with method count and file path.
+  - 现在只显示一次通知,包含方法数量和文件路径。
+
+### Improved / 改进
+
+- Added `bin/` directory to .gitignore to prevent tracking IDE output.
+- 将 `bin/` 目录添加到 .gitignore,防止跟踪 IDE 输出。
+
 ## [0.0.8] - 2025-11-30
 
 ### Added / 新增
