@@ -121,8 +121,14 @@ class GenerateDocAction : AnAction() {
         }
         
         // 保存文档
-        saveDocToFile(project, className, sb.toString())
-        Messages.showInfoMessage(project, "已为 $className 生成 ${methods.size} 个接口的文档", "成功")
+        val projectBasePath = project.basePath ?: return
+        val targetFile = File(projectBasePath, "http-mate/docs/$className.md")
+        saveDocToFile(project, className, sb.toString(), showSuccessMessage = false)
+        Messages.showInfoMessage(
+            project, 
+            "已为 $className 生成 ${methods.size} 个接口的文档\n文件位置: ${targetFile.absolutePath}", 
+            "成功"
+        )
     }
 
     private fun hasRestAnnotation(method: PsiMethod): Boolean {
@@ -154,7 +160,7 @@ class GenerateDocAction : AnAction() {
         }
     }
 
-    private fun saveDocToFile(project: Project, className: String, content: String) {
+    private fun saveDocToFile(project: Project, className: String, content: String, showSuccessMessage: Boolean = true) {
         val projectBasePath = project.basePath ?: return
         val targetDir = File(projectBasePath, "http-mate/docs")
         
@@ -170,7 +176,9 @@ class GenerateDocAction : AnAction() {
         try {
             targetFile.writeText(content)
             LocalFileSystem.getInstance().refreshAndFindFileByIoFile(targetFile)?.refresh(false, false)
-            Messages.showInfoMessage(project, "API Documentation generated at: ${targetFile.absolutePath}", "Success")
+            if (showSuccessMessage) {
+                Messages.showInfoMessage(project, "API Documentation generated at: ${targetFile.absolutePath}", "Success")
+            }
         } catch (e: Exception) {
             Messages.showErrorDialog(project, "Failed to write file: ${e.message}", "Error")
         }
