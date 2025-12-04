@@ -1,5 +1,34 @@
 # HttpMate Changelog
 
+## [0.0.10] - 2025-12-04
+
+### Added / 新增
+
+- **Project Service / 项目服务**:
+  - Refactored `MyProjectService` to `HttpMateProjectService` with enhanced functionality.
+  - 将 `MyProjectService` 重构为 `HttpMateProjectService`,增强了功能。
+  - Added configuration management (output directory, auto-open, etc.).
+  - 添加了配置管理(输出目录、自动打开等)。
+  - Added generation statistics tracking (total docs, last generation time, file list).
+  - 添加了生成统计跟踪(总文档数、最后生成时间、文件列表)。
+  - Centralized document output path management.
+  - 集中管理文档输出路径。
+
+### Changed / 变更
+
+- **Keyboard Shortcuts / 快捷键**:
+  - Changed REST API search shortcut from `Alt + |` to `Ctrl + \`.
+  - 将 REST API 搜索快捷键从 `Alt + |` 改为 `Ctrl + \`。
+  - `Ctrl + Alt + H` remains as alternative shortcut.
+  - `Ctrl + Alt + H` 保持为备用快捷键。
+
+### Improved / 改进
+
+- Updated all documentation (README, plugin description) to reflect new shortcuts.
+- 更新了所有文档(README、插件描述)以反映新的快捷键。
+- Integrated project service into document generation workflow.
+- 将项目服务集成到文档生成工作流中。
+
 ## [0.0.9] - 2025-12-01
 
 ### Added / 新增

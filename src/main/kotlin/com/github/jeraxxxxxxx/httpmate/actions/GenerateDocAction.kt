@@ -1,6 +1,7 @@
 package com.github.jeraxxxxxxx.httpmate.actions
 
 import com.github.jeraxxxxxxx.httpmate.doc.DocGenerator
+import com.github.jeraxxxxxxx.httpmate.services.HttpMateProjectService
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
@@ -39,7 +40,12 @@ class GenerateDocAction : AnAction() {
             val docContent = docGenerator.generate(psiMethod)
             val className = psiMethod.containingClass?.name ?: "Unknown"
             val methodName = psiMethod.name
-            saveDocToFile(project, "${className}_${methodName}", docContent)
+            val fileName = "${className}_${methodName}"
+            saveDocToFile(project, fileName, docContent)
+            
+            // 记录生成统计
+            val service = project.getService(HttpMateProjectService::class.java)
+            service.recordGeneration("$fileName.md")
         }
     }
 
@@ -121,9 +127,13 @@ class GenerateDocAction : AnAction() {
         }
         
         // 保存文档
-        val projectBasePath = project.basePath ?: return
-        val targetFile = File(projectBasePath, "http-mate/docs/$className.md")
+        val service = project.getService(HttpMateProjectService::class.java)
+        val targetFile = File(service.getDocOutputPath(), "$className.md")
         saveDocToFile(project, className, sb.toString(), showSuccessMessage = false)
+        
+        // 记录生成统计
+        service.recordGeneration("$className.md")
+        
         Messages.showInfoMessage(
             project, 
             "已为 $className 生成 ${methods.size} 个接口的文档\n文件位置: ${targetFile.absolutePath}", 
@@ -161,8 +171,8 @@ class GenerateDocAction : AnAction() {
     }
 
     private fun saveDocToFile(project: Project, className: String, content: String, showSuccessMessage: Boolean = true) {
-        val projectBasePath = project.basePath ?: return
-        val targetDir = File(projectBasePath, "http-mate/docs")
+        val service = project.getService(HttpMateProjectService::class.java)
+        val targetDir = File(service.getDocOutputPath())
         
         if (!targetDir.exists()) {
             if (!targetDir.mkdirs()) {

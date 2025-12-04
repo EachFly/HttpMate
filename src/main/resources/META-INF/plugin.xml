@@ -16,7 +16,7 @@
                 class="com.github.jeraxxxxxxx.httpmate.actions.RestApiSearchAction"
                 text="Search REST APIs"
                 description="Search for REST APIs in the project">
-            <keyboard-shortcut keymap="$default" first-keystroke="alt shift BACK_SLASH"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl BACK_SLASH"/>
             <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt H"/>
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>

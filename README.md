@@ -16,8 +16,8 @@
 ## Features / 功能特性
 
 - **REST API Search / 接口搜索**:
-  - `Alt + |` (or `Ctrl + Alt + H`) to search Spring Boot & JAX-RS APIs.
-  - `Alt + |` (或 `Ctrl + Alt + H`) 快速搜索 Spring Boot 和 JAX-RS 接口。
+  - `Ctrl + \` (or `Ctrl + Alt + H`) to search Spring Boot & JAX-RS APIs.
+  - `Ctrl + \` (或 `Ctrl + Alt + H`) 快速搜索 Spring Boot 和 JAX-RS 接口。
 - **JSON Generation / JSON 生成**:
   - Right-click on a class -> "Http-Mate Generate JSON" to generate data file.
   - 右键点击类名 -> "Http-Mate Generate JSON" 生成对应的 JSON 数据文件。

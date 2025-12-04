@@ -63,7 +63,7 @@ intellijPlatform {
             <br/>
             <h2>Features</h2>
             <ul>
-                <li><strong>REST API Search</strong>: <code>Alt + |</code> (or <code>Ctrl + Alt + H</code>) to search Spring Boot & JAX-RS APIs.</li>
+                <li><strong>REST API Search</strong>: <code>Ctrl + \</code> (or <code>Ctrl + Alt + H</code>) to search Spring Boot & JAX-RS APIs.</li>
                 <li><strong>JSON Generation</strong>: Right-click on a class -> "Http-Mate Generate JSON" to generate data file.</li>
                 <li><strong>API Documentation</strong>: Right-click on a method -> "Http-Mate Generate API Doc" to generate Markdown docs.</li>
                 <li><strong>Smart Navigation</strong>: Press <code>Enter</code> to jump to code definition.</li>
@@ -133,6 +133,9 @@ tasks {
 
     runIde {
         jvmArgs(
+            // 禁用 Security Manager 相关警告
+            "-Djava.security.manager=allow",
+            
             // 模块访问权限
             "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
             "--add-opens=java.base/java.lang=ALL-UNNAMED",
@@ -141,13 +144,13 @@ tasks {
             "--add-opens=java.base/java.nio=ALL-UNNAMED",
             "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
             "--add-opens=java.base/java.text=ALL-UNNAMED",
+            "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
             "--add-opens=java.desktop/java.awt.font=ALL-UNNAMED",
-            // 针对 JDK 21 的安全配置
-            "-Djava.security.manager=allow",
-            // 禁用安全管理器以避免 setContextClassLoader 错误
-            "-Djava.security.policy=",
-            // 配置线程工厂
-            "-Djava.util.concurrent.ForkJoinPool.common.threadFactory=java.util.concurrent.Executors\$DefaultThreadFactory"
+            "--add-opens=java.desktop/sun.awt=ALL-UNNAMED",
+            
+            // 禁用弃用警告
+            "-XX:+IgnoreUnrecognizedVMOptions",
+            "-XX:-PrintWarnings"
         )
     }
 }
