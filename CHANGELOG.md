@@ -1,5 +1,15 @@
 # HttpMate Changelog
 
+## [0.0.11] - 2025-12-17
+
+### Dependencies / 依赖升级
+
+- Upgraded Kotlin JVM plugin from 2.2.21 to 2.3.0
+- Upgraded Kover plugin from 0.9.3 to 0.9.4
+- Upgraded Qodana plugin from 2025.2.3 to 2025.2.4
+- Upgraded GitHub Actions upload-artifact from v5 to v6
+- Upgraded JetBrains/qodana-action from 2025.2.3 to 2025.2.4
+
 ## [0.0.10] - 2025-12-04
 
 ### Added / 新增
