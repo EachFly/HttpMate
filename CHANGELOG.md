@@ -1,5 +1,21 @@
 # HttpMate Changelog
 
+## [0.0.12] - 2025-12-25
+
+### Fixed / 修复
+
+- **Compatibility / 兼容性**:
+  - Fixed deprecated `Query.iterator()` usage in `RestApiScanner.scan()`
+  - 修复了 `RestApiScanner.scan()` 中使用已弃用的 `Query.iterator()` 方法
+  - Replaced with recommended `findAll()` method for better IntelliJ Platform compatibility
+  - 替换为推荐的 `findAll()` 方法以提高 IntelliJ Platform 兼容性
+
+- **Tests / 测试**:
+  - Updated unit tests to use refactored `HttpMateProjectService`
+  - 更新单元测试以使用重构后的 `HttpMateProjectService`
+  - Replaced obsolete test methods with actual service functionality tests
+  - 用实际服务功能测试替换了过时的测试方法
+
 ## [0.0.11] - 2025-12-17
 
 ### Dependencies / 依赖升级

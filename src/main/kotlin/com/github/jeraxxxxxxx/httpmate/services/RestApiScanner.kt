@@ -43,7 +43,8 @@ class RestApiScanner(private val project: Project) {
             
             val annotatedElements = AnnotatedElementsSearch.searchPsiMethods(annotationClass, scope)
             
-            for (method in annotatedElements) {
+            // Use findAll() instead of iterator() to avoid deprecation warning
+            for (method in annotatedElements.findAll()) {
                 if (!processedMethods.add(method)) continue // Avoid duplicates
 
                 val annotation = method.getAnnotation(annotationName) ?: continue
