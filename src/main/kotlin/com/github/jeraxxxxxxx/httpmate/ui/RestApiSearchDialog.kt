@@ -1,5 +1,6 @@
 package com.github.jeraxxxxxxx.httpmate.ui
 
+import com.github.jeraxxxxxxx.httpmate.constants.AppConstants
 import com.github.jeraxxxxxxx.httpmate.model.RestApiItem
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogWrapper
@@ -21,6 +22,10 @@ import javax.swing.JPanel
 import javax.swing.ListSelectionModel
 import javax.swing.event.DocumentEvent
 
+/**
+ * REST API 搜索对话框
+ * 提供快速搜索和导航到 API 定义的功能
+ */
 class RestApiSearchDialog(private val project: Project, private val allItems: List<RestApiItem>) : DialogWrapper(project) {
 
     private val listModel = javax.swing.DefaultListModel<RestApiItem>()
@@ -180,20 +185,19 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
                     list.repaint()
                 }
             }, com.intellij.openapi.application.ModalityState.stateForComponent(list))
-        }, 300)
+        }, AppConstants.SEARCH_DEBOUNCE_MS.toLong())
     }
 
     private fun updateList(items: List<RestApiItem>) {
         listModel.clear()
-        val limit = 50
-        items.take(limit).forEach { listModel.addElement(it) }
+        items.take(AppConstants.MAX_SEARCH_RESULTS).forEach { listModel.addElement(it) }
         
         if (items.isNotEmpty()) {
             list.selectedIndex = 0
         }
         
-        val countText = if (items.size > limit) {
-            "Found: ${items.size} (Showing top $limit) / Total: ${allItems.size}"
+        val countText = if (items.size > AppConstants.MAX_SEARCH_RESULTS) {
+            "Found: ${items.size} (Showing top ${AppConstants.MAX_SEARCH_RESULTS}) / Total: ${allItems.size}"
         } else {
             "Found: ${items.size} / Total: ${allItems.size}"
         }

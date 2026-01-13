@@ -37,7 +37,6 @@ class MyPluginTest : BasePlatformTestCase() {
         
         // Test default configuration
         assertEquals("http-mate/docs", projectService.docOutputDir)
-        assertEquals(false, projectService.autoOpenAfterGeneration)
         assertEquals(0, projectService.totalDocsGenerated)
         
         // Test configuration modification

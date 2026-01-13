@@ -1,5 +1,6 @@
 package com.github.jeraxxxxxxx.httpmate.actions
 
+import com.github.jeraxxxxxxx.httpmate.constants.RestAnnotations
 import com.github.jeraxxxxxxx.httpmate.doc.DocGenerator
 import com.github.jeraxxxxxxx.httpmate.services.HttpMateProjectService
 import com.intellij.openapi.actionSystem.ActionUpdateThread
@@ -14,6 +15,10 @@ import com.intellij.psi.PsiMethod
 import com.intellij.psi.PsiModifier
 import java.io.File
 
+/**
+ * 生成 API 文档的 Action
+ * 支持单个方法或整个类的文档生成
+ */
 class GenerateDocAction : AnAction() {
 
     private val docGenerator = DocGenerator()
@@ -142,31 +147,8 @@ class GenerateDocAction : AnAction() {
     }
 
     private fun hasRestAnnotation(method: PsiMethod): Boolean {
-        val restAnnotations = listOf(
-            // Spring Boot
-            "org.springframework.web.bind.annotation.GetMapping",
-            "org.springframework.web.bind.annotation.PostMapping",
-            "org.springframework.web.bind.annotation.PutMapping",
-            "org.springframework.web.bind.annotation.DeleteMapping",
-            "org.springframework.web.bind.annotation.PatchMapping",
-            "org.springframework.web.bind.annotation.RequestMapping",
-            // JAX-RS (javax)
-            "javax.ws.rs.GET",
-            "javax.ws.rs.POST",
-            "javax.ws.rs.PUT",
-            "javax.ws.rs.DELETE",
-            "javax.ws.rs.PATCH",
-            "javax.ws.rs.Path",
-            // Jakarta EE (jakarta)
-            "jakarta.ws.rs.GET",
-            "jakarta.ws.rs.POST",
-            "jakarta.ws.rs.PUT",
-            "jakarta.ws.rs.DELETE",
-            "jakarta.ws.rs.PATCH",
-            "jakarta.ws.rs.Path"
-        )
         return method.annotations.any { annotation ->
-            restAnnotations.contains(annotation.qualifiedName)
+            RestAnnotations.ALL.contains(annotation.qualifiedName)
         }
     }
 

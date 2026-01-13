@@ -1,5 +1,6 @@
 package com.github.jeraxxxxxxx.httpmate.generator
 
+import com.github.jeraxxxxxxx.httpmate.constants.AppConstants
 import com.intellij.psi.*
 import com.intellij.psi.util.PsiTypesUtil
 import java.time.LocalDateTime
@@ -7,11 +8,15 @@ import java.time.format.DateTimeFormatter
 import java.util.*
 import kotlin.random.Random
 
+/**
+ * Mock JSON 生成器
+ * 生成带有真实模拟数据的 JSON
+ */
 class MockJsonGenerator : JsonGenerator {
     private val random = Random.Default
 
     override fun generate(type: PsiType, depth: Int): String {
-        if (depth > 5) return "{}" // Prevent infinite recursion
+        if (depth > AppConstants.MAX_JSON_RECURSION_DEPTH) return "{}"
 
         if (type is PsiPrimitiveType) {
             return when (type) {

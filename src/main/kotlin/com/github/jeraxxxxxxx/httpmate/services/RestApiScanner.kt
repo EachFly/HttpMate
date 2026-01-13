@@ -1,60 +1,49 @@
 package com.github.jeraxxxxxxx.httpmate.services
 
+import com.github.jeraxxxxxxx.httpmate.constants.RestAnnotations
 import com.github.jeraxxxxxxx.httpmate.model.RestApiItem
 import com.github.jeraxxxxxxx.httpmate.ui.RestApiIcons
+import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.project.Project
 import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.PsiAnnotation
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.searches.AnnotatedElementsSearch
 
+/**
+ * REST API 扫描器
+ * 扫描项目中的 Spring Boot 和 JAX-RS REST API 定义
+ */
 class RestApiScanner(private val project: Project) {
+    
+    /**
+     * 扫描项目中的所有 REST API
+     * @return REST API 列表
+     */
     fun scan(): List<RestApiItem> {
         val items = mutableListOf<RestApiItem>()
         val scope = GlobalSearchScope.projectScope(project)
         val javaPsiFacade = JavaPsiFacade.getInstance(project)
-        
-        val mappingAnnotations = listOf(
-            "org.springframework.web.bind.annotation.RequestMapping",
-            "org.springframework.web.bind.annotation.GetMapping",
-            "org.springframework.web.bind.annotation.PostMapping",
-            "org.springframework.web.bind.annotation.PutMapping",
-            "org.springframework.web.bind.annotation.DeleteMapping",
-            "org.springframework.web.bind.annotation.PatchMapping",
-            "javax.ws.rs.Path",
-            "jakarta.ws.rs.Path",
-            "javax.ws.rs.GET", "jakarta.ws.rs.GET",
-            "javax.ws.rs.POST", "jakarta.ws.rs.POST",
-            "javax.ws.rs.PUT", "jakarta.ws.rs.PUT",
-            "javax.ws.rs.DELETE", "jakarta.ws.rs.DELETE",
-            "javax.ws.rs.PATCH", "jakarta.ws.rs.PATCH",
-            "javax.ws.rs.HEAD", "jakarta.ws.rs.HEAD",
-            "javax.ws.rs.OPTIONS", "jakarta.ws.rs.OPTIONS"
-        )
-
-        val logger = com.intellij.openapi.diagnostic.Logger.getInstance(RestApiScanner::class.java)
         val processedMethods = mutableSetOf<com.intellij.psi.PsiMethod>()
 
-        for (annotationName in mappingAnnotations) {
-            val annotationClass = javaPsiFacade.findClass(annotationName, scope)
-            if (annotationClass == null) {
-                continue
-            }
-            
-            val annotatedElements = AnnotatedElementsSearch.searchPsiMethods(annotationClass, scope)
-            
-            // Use findAll() instead of iterator() to avoid deprecation warning
-            for (method in annotatedElements.findAll()) {
-                if (!processedMethods.add(method)) continue // Avoid duplicates
+        for (annotationName in RestAnnotations.ALL) {
+            try {
+                val annotationClass = javaPsiFacade.findClass(annotationName, scope) ?: continue
+                val annotatedElements = AnnotatedElementsSearch.searchPsiMethods(annotationClass, scope)
+                
+                for (method in annotatedElements.findAll()) {
+                    if (!processedMethods.add(method)) continue
 
-                val annotation = method.getAnnotation(annotationName) ?: continue
-                val methodPath = extractPath(method, annotation)
-                val classPath = extractClassPath(method.containingClass)
-                val fullPath = combinePaths(classPath, methodPath)
-                
-                val httpMethod = extractMethod(method, annotationName, annotation)
-                
-                items.add(RestApiItem(httpMethod, fullPath, method, RestApiIcons.getIcon(httpMethod)))
+                    val annotation = method.getAnnotation(annotationName) ?: continue
+                    val methodPath = extractPath(method, annotation)
+                    val classPath = extractClassPath(method.containingClass)
+                    val fullPath = combinePaths(classPath, methodPath)
+                    val httpMethod = extractMethod(method, annotationName, annotation)
+                    
+                    items.add(RestApiItem(httpMethod, fullPath, method, RestApiIcons.getIcon(httpMethod)))
+                }
+            } catch (e: Exception) {
+                thisLogger().warn("Error scanning for annotation: $annotationName", e)
             }
         }
         return items
@@ -63,16 +52,9 @@ class RestApiScanner(private val project: Project) {
     private fun extractClassPath(psiClass: com.intellij.psi.PsiClass?): String {
         if (psiClass == null) return ""
         
-        val classAnnotations = listOf(
-            "org.springframework.web.bind.annotation.RequestMapping",
-            "javax.ws.rs.Path",
-            "jakarta.ws.rs.Path"
-        )
-
-        for (annotationName in classAnnotations) {
+        for (annotationName in RestAnnotations.CLASS_PATH_ANNOTATIONS) {
             val annotation = psiClass.getAnnotation(annotationName)
             if (annotation != null) {
-                // For class path, we just pass the annotation as is, context method is null (not needed for class path)
                 return extractPathFromAnnotation(annotation)
             }
         }
