@@ -4,9 +4,19 @@ import com.github.jeraxxxxxxx.httpmate.generator.MockJsonGenerator
 import com.intellij.psi.*
 import com.intellij.psi.util.PsiTypesUtil
 
+/**
+ * API 文档生成器
+ * 负责解析 PsiMethod 并生成 Markdown 格式的接口文档
+ */
 class DocGenerator {
     private val mockJsonGenerator = MockJsonGenerator()
 
+    /**
+     * 生成单个方法的 API 文档
+     * 包括接口信息、请求参数、响应参数和示例
+     * @param method 要生成文档的方法
+     * @return Markdown 格式的文档内容
+     */
     fun generate(method: PsiMethod): String {
         val sb = StringBuilder()
         val className = method.containingClass?.name ?: "Unknown"

@@ -27,6 +27,10 @@ class GenerateDocAction : AnAction() {
         return ActionUpdateThread.BGT
     }
 
+    /**
+     * 处理 Action 执行事件
+     * 根据上下文生成类或方法的文档
+     */
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
         
@@ -54,6 +58,10 @@ class GenerateDocAction : AnAction() {
         }
     }
 
+    /**
+     * 更新 Action 状态
+     * 仅在光标位于类或方法中时启用
+     */
     override fun update(e: AnActionEvent) {
         val psiClass = getPsiClassFromContext(e)
         val psiMethod = getPsiMethodFromContext(e)
