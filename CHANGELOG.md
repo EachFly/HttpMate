@@ -1,5 +1,27 @@
 # HttpMate Changelog
 
+## [0.0.13] - 2026-01-27
+
+### Improved / 优化
+
+- **Menu Structure / 菜单结构**:
+  - Grouped all HttpMate features under a single "HttpMate" submenu in context menus
+  - 将所有 HttpMate 功能聚合到右键菜单的 "HttpMate" 二级菜单中
+  - Menu now appears at the top of the context menu (was at the bottom)
+  - 菜单现在显示在右键菜单顶部（之前在底部）
+  - Added HttpMate logo icon to the menu group
+  - 为菜单组添加了 HttpMate logo 图标
+
+- **Code Quality / 代码质量**:
+  - Added KDoc documentation to public methods in `RestApiScanner`, `DocGenerator`, and `GenerateDocAction`
+  - 为 `RestApiScanner`, `DocGenerator` 和 `GenerateDocAction` 的公共方法添加了 KDoc 文档
+  - Refactored `scanFallback()` into smaller helper methods for better maintainability
+  - 将 `scanFallback()` 重构为更小的辅助方法以提高可维护性
+  - Extracted regex patterns to class-level properties
+  - 将正则表达式模式提取为类级属性
+  - Created centralized `Constants.kt` for REST annotations and app constants
+  - 创建了集中管理 REST 注解和应用常量的 `Constants.kt`
+
 ## [0.0.12] - 2025-12-25
 
 ### Fixed / 修复
