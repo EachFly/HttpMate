@@ -68,16 +68,21 @@ intellijPlatform {
                 <li><strong>API Documentation</strong>: Right-click on a method -> "Http-Mate Generate API Doc" to generate Markdown docs.</li>
                 <li><strong>Smart Navigation</strong>: Press <code>Enter</code> to jump to code definition.</li>
             </ul>
+            <br/>
+            <p><strong>Source Code</strong>: <a href="https://github.com/EachFly/HttpMate">https://github.com/EachFly/HttpMate</a></p>
         """.trimIndent()
 
         val changelog = project.changelog // local variable for configuration cache compatibility
-        // Hardcoded change notes for 0.0.8
-        changeNotes = """
-            <h3>Added</h3>
-            <ul>
-                <li><strong>API Documentation</strong>: Added "Http-Mate Generate API Doc" action to generate Markdown documentation for Controller methods.</li>
-            </ul>
-        """.trimIndent()
+        changeNotes = providers.gradleProperty("pluginVersion").map { pluginVersion ->
+            with(changelog) {
+                renderItem(
+                    (getOrNull(pluginVersion) ?: getUnreleased())
+                        .withHeader(false)
+                        .withEmptySections(false),
+                    org.jetbrains.changelog.Changelog.OutputType.HTML,
+                )
+            }
+        }
 
         ideaVersion {
             sinceBuild = providers.gradleProperty("pluginSinceBuild")

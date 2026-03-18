@@ -1,5 +1,14 @@
 # HttpMate Changelog
 
+## [0.0.14] - 2026-03-18
+
+### Dependencies / 依赖升级
+
+- Upgraded `org.jetbrains.intellij.platform` from `2.12.0` to `2.13.1`
+- Upgraded `org.jetbrains.kotlin.jvm` from `2.3.10` to `2.3.20`
+- Upgraded `org.jetbrains.qodana` from `2025.3.1` to `2025.3.2`
+- Upgraded `JetBrains/qodana-action` from `2025.3.1` to `2025.3.2`
+
 ## [0.0.13] - 2026-01-27
 
 ### Improved / 优化
