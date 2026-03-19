@@ -7,6 +7,7 @@ import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.project.Project
 import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.PsiAnnotation
+import com.intellij.psi.SmartPointerManager
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.searches.AnnotatedElementsSearch
 
@@ -46,7 +47,8 @@ class RestApiScanner(private val project: Project) {
                     val fullPath = combinePaths(classPath, methodPath)
                     val httpMethod = extractMethod(method, annotationName, annotation)
                     
-                    items.add(RestApiItem(httpMethod, fullPath, method, RestApiIcons.getIcon(httpMethod)))
+                    val pointer = SmartPointerManager.createPointer(method as com.intellij.psi.PsiElement)
+                    items.add(RestApiItem(httpMethod, fullPath, pointer, RestApiIcons.getIcon(httpMethod)))
                 }
             } catch (e: Exception) {
                 thisLogger().warn("Error scanning for annotation: $annotationName", e)
@@ -206,8 +208,8 @@ class RestApiScanner(private val project: Project) {
             // Find the element offset to navigate to
             val offset = match.range.first
             val element = file.findElementAt(offset) ?: file
-            
-            items.add(RestApiItem(method, fullPath, element, RestApiIcons.getIcon(method)))
+            val pointer = SmartPointerManager.createPointer(element)
+            items.add(RestApiItem(method, fullPath, pointer, RestApiIcons.getIcon(method)))
         }
         return items
     }

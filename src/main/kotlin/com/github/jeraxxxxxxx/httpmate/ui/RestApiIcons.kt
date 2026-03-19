@@ -40,7 +40,9 @@ class MethodIcon(private val method: String) : Icon {
 }
 
 object RestApiIcons {
+    private val iconCache = mutableMapOf<String, Icon>()
+
     fun getIcon(method: String): Icon {
-        return MethodIcon(method)
+        return iconCache.getOrPut(method.uppercase()) { MethodIcon(method) }
     }
 }

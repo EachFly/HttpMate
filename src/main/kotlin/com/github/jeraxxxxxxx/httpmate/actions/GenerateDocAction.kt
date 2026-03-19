@@ -50,11 +50,13 @@ class GenerateDocAction : AnAction() {
             val className = psiMethod.containingClass?.name ?: "Unknown"
             val methodName = psiMethod.name
             val fileName = "${className}_${methodName}"
-            saveDocToFile(project, fileName, docContent)
             
-            // 记录生成统计
-            val service = project.getService(HttpMateProjectService::class.java)
-            service.recordGeneration("$fileName.md")
+            saveDocToFileAsync(project, fileName, docContent) {
+                // 记录生成统计
+                val service = project.getService(HttpMateProjectService::class.java)
+                service.recordGeneration("$fileName.md")
+                Messages.showInfoMessage(project, "API Documentation generated at: ${service.getDocOutputPath()}/$fileName.md", "Success")
+            }
         }
     }
 
@@ -139,19 +141,19 @@ class GenerateDocAction : AnAction() {
             sb.append(docGenerator.generate(method))
         }
         
-        // 保存文档
+        // 保存文档（异步）
         val service = project.getService(HttpMateProjectService::class.java)
         val targetFile = File(service.getDocOutputPath(), "$className.md")
-        saveDocToFile(project, className, sb.toString(), showSuccessMessage = false)
         
-        // 记录生成统计
-        service.recordGeneration("$className.md")
-        
-        Messages.showInfoMessage(
-            project, 
-            "已为 $className 生成 ${methods.size} 个接口的文档\n文件位置: ${targetFile.absolutePath}", 
-            "成功"
-        )
+        saveDocToFileAsync(project, className, sb.toString()) {
+            // 记录生成统计
+            service.recordGeneration("$className.md")
+            Messages.showInfoMessage(
+                project, 
+                "已为 $className 生成 ${methods.size} 个接口的文档\n文件位置: ${targetFile.absolutePath}", 
+                "成功"
+            )
+        }
     }
 
     private fun hasRestAnnotation(method: PsiMethod): Boolean {
@@ -160,27 +162,44 @@ class GenerateDocAction : AnAction() {
         }
     }
 
-    private fun saveDocToFile(project: Project, className: String, content: String, showSuccessMessage: Boolean = true) {
+    /**
+     * 异步保存文档到文件
+     * 文件 I/O 在后台线程执行，UI 反馈回到 EDT
+     * @param onSuccess 保存成功后在 EDT 上执行的回调（可选）
+     */
+    private fun saveDocToFileAsync(
+        project: Project,
+        className: String,
+        content: String,
+        onSuccess: (() -> Unit)? = null
+    ) {
         val service = project.getService(HttpMateProjectService::class.java)
         val targetDir = File(service.getDocOutputPath())
-        
-        if (!targetDir.exists()) {
-            if (!targetDir.mkdirs()) {
-                Messages.showErrorDialog(project, "Failed to create directory: ${targetDir.absolutePath}", "Error")
-                return
-            }
-        }
 
-        val targetFile = File(targetDir, "$className.md")
-        
-        try {
-            targetFile.writeText(content)
-            LocalFileSystem.getInstance().refreshAndFindFileByIoFile(targetFile)?.refresh(false, false)
-            if (showSuccessMessage) {
-                Messages.showInfoMessage(project, "API Documentation generated at: ${targetFile.absolutePath}", "Success")
+        com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread {
+            try {
+                if (!targetDir.exists()) {
+                    if (!targetDir.mkdirs()) {
+                        com.intellij.openapi.application.ApplicationManager.getApplication().invokeLater {
+                            Messages.showErrorDialog(project, "Failed to create directory: ${targetDir.absolutePath}", "Error")
+                        }
+                        return@executeOnPooledThread
+                    }
+                }
+
+                val targetFile = File(targetDir, "$className.md")
+                targetFile.writeText(content)
+
+                com.intellij.openapi.application.ApplicationManager.getApplication().invokeLater {
+                    LocalFileSystem.getInstance().refreshAndFindFileByIoFile(targetFile)?.refresh(false, false)
+                    onSuccess?.invoke()
+                }
+            } catch (e: Exception) {
+                com.intellij.openapi.application.ApplicationManager.getApplication().invokeLater {
+                    Messages.showErrorDialog(project, "Failed to write file: ${e.message}", "Error")
+                }
             }
-        } catch (e: Exception) {
-            Messages.showErrorDialog(project, "Failed to write file: ${e.message}", "Error")
         }
     }
 }
+

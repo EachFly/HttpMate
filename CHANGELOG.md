@@ -1,5 +1,35 @@
 # HttpMate Changelog
 
+## [0.0.15] - 2026-03-19
+
+### Fixed / 修复
+
+- **Thread Safety / 线程安全**:
+  - Moved REST API scanning from EDT to background thread with progress indicator
+  - 将 REST API 扫描从 EDT 移至后台线程并显示进度条
+  - Fixed `PsiElement` memory leak by using `SmartPsiElementPointer` in `RestApiItem`
+  - 使用 `SmartPsiElementPointer` 修复 `RestApiItem` 中的 `PsiElement` 内存泄漏
+  - Moved file I/O operations in `GenerateDocAction` to pooled thread
+  - 将 `GenerateDocAction` 中的文件 I/O 操作移至线程池
+
+### Improved / 优化
+
+- **Concurrency / 并发安全**:
+  - Made `HttpMateProjectService` statistics thread-safe with `AtomicInteger` and `ConcurrentHashMap`
+  - 使用 `AtomicInteger` 和 `ConcurrentHashMap` 使统计信息线程安全
+  - Added `ReadAction` wrapper in search filter for safe PSI access
+  - 在搜索过滤中添加 `ReadAction` 包装以安全访问 PSI
+
+- **Performance / 性能**:
+  - Cached `MethodIcon` instances in `RestApiIcons` to reduce GC pressure
+  - 缓存 `MethodIcon` 实例以减少 GC 压力
+
+- **Consistency / 一致性**:
+  - Replaced hardcoded recursion depth in `DefaultJsonGenerator` with `AppConstants`
+  - 将 `DefaultJsonGenerator` 中的硬编码递归深度替换为 `AppConstants`
+  - Added `getActionUpdateThread()` override to `RestApiSearchAction`
+  - 为 `RestApiSearchAction` 添加了 `getActionUpdateThread()` 重写
+
 ## [0.0.14] - 2026-03-18
 
 ### Dependencies / 依赖升级

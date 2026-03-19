@@ -1,11 +1,12 @@
 package com.github.jeraxxxxxxx.httpmate.generator
 
+import com.github.jeraxxxxxxx.httpmate.constants.AppConstants
 import com.intellij.psi.*
 import com.intellij.psi.util.PsiTypesUtil
 
 class DefaultJsonGenerator : JsonGenerator {
     override fun generate(type: PsiType, depth: Int): String {
-        if (depth > 5) return "{}" // Prevent infinite recursion
+        if (depth > AppConstants.MAX_JSON_RECURSION_DEPTH) return "{}" // Prevent infinite recursion
 
         if (type is PsiPrimitiveType) {
             return when (type) {
