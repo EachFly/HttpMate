@@ -110,20 +110,33 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
 
                 val lowerText = text.lowercase()
                 val lowerQuery = query.lowercase()
-                var start = 0
-                var index = lowerText.indexOf(lowerQuery, start)
-
-                while (index != -1) {
-                    if (index > start) {
-                        append(text.substring(start, index), baseAttributes)
+                
+                var queryIndex = 0
+                val sb = StringBuilder()
+                var lastWasMatch = false
+                
+                for (i in text.indices) {
+                    val isMatch = queryIndex < lowerQuery.length && lowerText[i] == lowerQuery[queryIndex]
+                    if (isMatch) {
+                        if (!lastWasMatch && sb.isNotEmpty()) {
+                            append(sb.toString(), baseAttributes)
+                            sb.clear()
+                        }
+                        sb.append(text[i])
+                        lastWasMatch = true
+                        queryIndex++
+                    } else {
+                        if (lastWasMatch && sb.isNotEmpty()) {
+                            append(sb.toString(), HIGHLIGHT_ATTRIBUTES)
+                            sb.clear()
+                        }
+                        sb.append(text[i])
+                        lastWasMatch = false
                     }
-                    append(text.substring(index, index + query.length), HIGHLIGHT_ATTRIBUTES)
-                    start = index + query.length
-                    index = lowerText.indexOf(lowerQuery, start)
                 }
-
-                if (start < text.length) {
-                    append(text.substring(start), baseAttributes)
+                
+                if (sb.isNotEmpty()) {
+                    append(sb.toString(), if (lastWasMatch) HIGHLIGHT_ATTRIBUTES else baseAttributes)
                 }
             }
         }
@@ -177,8 +190,8 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
                     allItems
                 } else {
                     allItems.filter { 
-                        it.path.lowercase().contains(query) || 
-                        it.method.lowercase().contains(query) 
+                        isSubsequence(query, it.path.lowercase()) || 
+                        isSubsequence(query, it.method.lowercase()) 
                     }
                 }
             }
@@ -191,6 +204,19 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
                 }
             }, com.intellij.openapi.application.ModalityState.stateForComponent(list))
         }, AppConstants.SEARCH_DEBOUNCE_MS.toLong())
+    }
+
+    private fun isSubsequence(query: String, target: String): Boolean {
+        if (query.isEmpty()) return true
+        var i = 0
+        var j = 0
+        while (i < query.length && j < target.length) {
+            if (query[i] == target[j]) {
+                i++
+            }
+            j++
+        }
+        return i == query.length
     }
 
     private fun updateList(items: List<RestApiItem>) {

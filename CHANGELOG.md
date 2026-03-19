@@ -1,5 +1,15 @@
 # HttpMate Changelog
 
+## [0.0.16] - 2026-03-19
+
+### Improved / 优化
+
+- **Search Navigation / 搜索导航**:
+  - Enhanced REST API search with fuzzy subsequence matching (e.g., typing `apiinfo` to match `/api/user/info`)
+  - 优化 REST API 搜索功能，支持模糊子序列匹配（如输入 `apiinfo` 即可匹配 `/api/user/info`）
+  - Added precise highlighting for fuzzy-matched characters in search results
+  - 在搜索结果中支持对模糊匹配字符的精确高亮显示
+
 ## [0.0.15] - 2026-03-19
 
 ### Fixed / 修复
