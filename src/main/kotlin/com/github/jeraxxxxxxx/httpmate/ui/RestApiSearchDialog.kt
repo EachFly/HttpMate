@@ -3,9 +3,10 @@ package com.github.jeraxxxxxxx.httpmate.ui
 import com.github.jeraxxxxxxx.httpmate.HttpMateBundle
 import com.github.jeraxxxxxxx.httpmate.constants.AppConstants
 import com.github.jeraxxxxxxx.httpmate.model.RestApiItem
-import com.intellij.openapi.application.ReadAction
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogWrapper
+import com.intellij.openapi.util.Computable
 import com.intellij.ui.ColoredListCellRenderer
 import com.intellij.ui.DocumentAdapter
 import com.intellij.ui.SearchTextField
@@ -234,9 +235,9 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
     override fun doOKAction() {
         val selected = list.selectedValue
         if (selected != null) {
-            val element = ReadAction.compute<com.intellij.psi.PsiElement?, RuntimeException> {
+            val element = ApplicationManager.getApplication().runReadAction(Computable<com.intellij.psi.PsiElement?> {
                 selected.element
-            }
+            })
             if (element != null && element.isValid) {
                 val navigatable = element as? com.intellij.pom.Navigatable
                     ?: element.navigationElement as? com.intellij.pom.Navigatable

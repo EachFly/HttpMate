@@ -7,12 +7,12 @@ import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
+import com.intellij.openapi.util.Computable
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.PsiDocumentManager
@@ -41,12 +41,12 @@ abstract class BaseGenerateJsonAction : AnAction() {
                     indicator.isIndeterminate = true
 
                     try {
-                        val result = ReadAction.compute<Pair<String, String>?, Exception> {
-                            val targetClass = classPointer.element ?: return@compute null
-                            val className = targetClass.name ?: "Unknown"
-                            val generator = getGenerator()
-                            className to generator.generate(JavaPsiFacade.getElementFactory(project).createType(targetClass), 0)
-                        } ?: return
+                    val result = ApplicationManager.getApplication().runReadAction(Computable<Pair<String, String>?> {
+                        val targetClass = classPointer.element ?: return@Computable null
+                        val className = targetClass.name ?: "Unknown"
+                        val generator = getGenerator()
+                        className to generator.generate(JavaPsiFacade.getElementFactory(project).createType(targetClass), 0)
+                    }) ?: return
                         saveJsonToFile(project, result.first, result.second)
                     } catch (ex: Exception) {
                         ApplicationManager.getApplication().invokeLater {

@@ -14,6 +14,7 @@ import com.intellij.psi.SmartPointerManager
 import com.intellij.psi.SmartPsiElementPointer
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.searches.AnnotatedElementsSearch
+import com.intellij.util.Processor
 
 /**
  * REST API 扫描器
@@ -42,11 +43,14 @@ class RestApiScanner(private val project: Project) {
                 val annotationClass = javaPsiFacade.findClass(annotationName, scope) ?: continue
                 val annotatedElements = AnnotatedElementsSearch.searchPsiMethods(annotationClass, scope)
 
-                for (method in annotatedElements) {
+                annotatedElements.forEach(Processor { method ->
                     ProgressManager.checkCanceled()
-                    if (!processedMethods.add(method)) continue
+                    if (!processedMethods.add(method)) {
+                        return@Processor true
+                    }
                     pointers.add(SmartPointerManager.createPointer(method))
-                }
+                    true
+                })
             } catch (e: Exception) {
                 thisLogger().warn("Error scanning for annotation: $annotationName", e)
             }

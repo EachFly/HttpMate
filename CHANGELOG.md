@@ -1,12 +1,14 @@
 # HttpMate Changelog
 
-## [0.0.17] - 2026-03-22
+## [1.0.0] - 2026-03-22
 
 ### Fixed
 
 - Refined action context resolution so class-level JSON generation also works for Java record files.
 - Stabilized class-level API documentation generation on the first right-click invocation by committing documents before resolving PSI and reloading PSI from smart pointers in background tasks.
 - Improved REST annotation detection to recognize annotations even when only short names are immediately available during PSI resolution.
+- Replaced deprecated `Query.iterator()` usage in REST API scanning.
+- Replaced deprecated `ReadAction.compute(ThrowableComputable)` calls with supported synchronous read actions.
 
 ### Improved
 

@@ -8,12 +8,12 @@ import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
+import com.intellij.openapi.util.Computable
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiDocumentManager
@@ -66,13 +66,13 @@ class GenerateDocAction : AnAction() {
                 indicator.isIndeterminate = true
 
                 try {
-                    val result = ReadAction.compute<Triple<String, String, String>?, Exception> {
-                        val psiMethod = psiMethodPointer.element ?: return@compute null
+                    val result = ApplicationManager.getApplication().runReadAction(Computable<Triple<String, String, String>?> {
+                        val psiMethod = psiMethodPointer.element ?: return@Computable null
                         val className = psiMethod.containingClass?.name ?: "Unknown"
                         val methodName = psiMethod.name
                         val fileName = "${className}_${methodName}"
                         Triple(fileName, "${project.getService(HttpMateProjectService::class.java).getDocOutputPath()}/$fileName.md", docGenerator.generate(psiMethod))
-                    } ?: return
+                    }) ?: return
 
                     saveDocToFileAsync(project, result.first, result.third) {
                         val service = project.getService(HttpMateProjectService::class.java)
@@ -96,12 +96,12 @@ class GenerateDocAction : AnAction() {
                 indicator.isIndeterminate = true
 
                 try {
-                    val result = ReadAction.compute<Triple<String, Int, String>?, Exception> {
-                        val psiClass = psiClassPointer.element ?: return@compute null
+                    val result = ApplicationManager.getApplication().runReadAction(Computable<Triple<String, Int, String>?> {
+                        val psiClass = psiClassPointer.element ?: return@Computable null
                         val className = psiClass.name ?: "Unknown"
-                        val built = buildClassDoc(psiClass) ?: return@compute null
+                        val built = buildClassDoc(psiClass) ?: return@Computable null
                         Triple(built.first, built.second, className)
-                    } ?: run {
+                    }) ?: run {
                         ApplicationManager.getApplication().invokeLater {
                             Messages.showInfoMessage(
                                 project,
