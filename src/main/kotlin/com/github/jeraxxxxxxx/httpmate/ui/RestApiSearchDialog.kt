@@ -1,7 +1,9 @@
 package com.github.jeraxxxxxxx.httpmate.ui
 
+import com.github.jeraxxxxxxx.httpmate.HttpMateBundle
 import com.github.jeraxxxxxxx.httpmate.constants.AppConstants
 import com.github.jeraxxxxxxx.httpmate.model.RestApiItem
+import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.ui.ColoredListCellRenderer
@@ -38,7 +40,7 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
 
     init {
         init()
-        title = "Search REST APIs"
+        title = HttpMateBundle.message("rest.search.title")
         updateList(allItems)
     }
 
@@ -90,12 +92,8 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
                 append(" ")
                 appendHighlighted(value.path, currentQuery, SimpleTextAttributes.REGULAR_ATTRIBUTES)
                 
-                val psiElement = value.element
-                if (psiElement != null) {
-                    val psiFile = psiElement.containingFile
-                    if (psiFile != null) {
-                         append(" (" + psiFile.name + ")", SimpleTextAttributes.GRAY_ATTRIBUTES)
-                    }
+                if (value.fileName.isNotEmpty()) {
+                    append(" (${value.fileName})", SimpleTextAttributes.GRAY_ATTRIBUTES)
                 }
                 icon = value.icon
             }
@@ -185,17 +183,15 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
         searchAlarm.cancelAllRequests()
         searchAlarm.addRequest({
             val query = text.trim().lowercase()
-            val filtered = com.intellij.openapi.application.ReadAction.compute<List<RestApiItem>, Exception> {
-                if (query.isEmpty()) {
-                    allItems
-                } else {
-                    allItems.filter { 
-                        isSubsequence(query, it.path.lowercase()) || 
-                        isSubsequence(query, it.method.lowercase()) 
-                    }
+            val filtered = if (query.isEmpty()) {
+                allItems
+            } else {
+                allItems.filter {
+                    isSubsequence(query, it.path.lowercase()) ||
+                    isSubsequence(query, it.method.lowercase())
                 }
             }
-            
+
             com.intellij.openapi.application.ApplicationManager.getApplication().invokeLater({
                 if (!isDisposed) {
                     currentQuery = text.trim()
@@ -228,9 +224,9 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
         }
         
         val countText = if (items.size > AppConstants.MAX_SEARCH_RESULTS) {
-            "Found: ${items.size} (Showing top ${AppConstants.MAX_SEARCH_RESULTS}) / Total: ${allItems.size}"
+            HttpMateBundle.message("rest.search.status.limited", items.size, AppConstants.MAX_SEARCH_RESULTS, allItems.size)
         } else {
-            "Found: ${items.size} / Total: ${allItems.size}"
+            HttpMateBundle.message("rest.search.status.full", items.size, allItems.size)
         }
         statusLabel.text = countText
     }
@@ -238,7 +234,9 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
     override fun doOKAction() {
         val selected = list.selectedValue
         if (selected != null) {
-            val element = selected.element
+            val element = ReadAction.compute<com.intellij.psi.PsiElement?, RuntimeException> {
+                selected.element
+            }
             if (element != null && element.isValid) {
                 val navigatable = element as? com.intellij.pom.Navigatable
                     ?: element.navigationElement as? com.intellij.pom.Navigatable
@@ -247,7 +245,7 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
                     navigatable.navigate(true)
                 } else {
                     element.containingFile?.virtualFile?.let { file ->
-                        com.intellij.openapi.fileEditor.OpenFileDescriptor(project, file, element.textOffset).navigate(true)
+                        com.intellij.openapi.fileEditor.OpenFileDescriptor(project, file, selected.navigationOffset).navigate(true)
                     }
                 }
             }

@@ -11,6 +11,8 @@ import javax.swing.Icon
 data class RestApiItem(
     val method: String,
     val path: String,
+    val fileName: String,
+    val navigationOffset: Int,
     val elementPointer: SmartPsiElementPointer<PsiElement>,
     val icon: Icon? = null
 ) {

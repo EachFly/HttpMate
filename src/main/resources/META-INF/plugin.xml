@@ -9,17 +9,13 @@
 
     <resource-bundle>messages.MyBundle</resource-bundle>
 
-    <extensions defaultExtensionNs="com.intellij">
-    </extensions>
     <actions>
-        <!-- HttpMate 主菜单组 -->
         <group id="com.github.jeraxxxxxxx.httpmate.HttpMateGroup"
                text="HttpMate"
-               description="HttpMate REST API Tools"
+               description="HttpMate REST API tools"
                icon="/icons/httpmate.svg"
                popup="true">
-            
-            <!-- Search REST APIs -->
+
             <action id="com.github.jeraxxxxxxx.httpmate.actions.RestApiSearchAction"
                     class="com.github.jeraxxxxxxx.httpmate.actions.RestApiSearchAction"
                     text="Search REST APIs"
@@ -28,35 +24,30 @@
                 <keyboard-shortcut keymap="$default" first-keystroke="ctrl BACK_SLASH"/>
                 <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt H"/>
             </action>
-            
+
             <separator/>
-            
-            <!-- Generate JSON -->
+
             <action id="com.github.jeraxxxxxxx.httpmate.actions.GenerateJsonAction"
                     class="com.github.jeraxxxxxxx.httpmate.actions.GenerateJsonAction"
                     text="Generate JSON"
                     description="Generate JSON for the selected class"/>
-            
-            <!-- Generate Mock JSON -->
+
             <action id="com.github.jeraxxxxxxx.httpmate.actions.GenerateMockJsonAction"
                     class="com.github.jeraxxxxxxx.httpmate.actions.GenerateMockJsonAction"
                     text="Generate Mock JSON"
                     description="Generate JSON with mock data for the selected class"/>
-            
+
             <separator/>
-            
-            <!-- Generate API Documentation -->
+
             <action id="com.github.jeraxxxxxxx.httpmate.actions.GenerateDocAction"
                     class="com.github.jeraxxxxxxx.httpmate.actions.GenerateDocAction"
                     text="Generate API Doc"
                     description="Generate Markdown documentation for the selected method"/>
-            
-            <!-- 将 HttpMate 组添加到各个菜单,使用 first 使其显示在顶部 -->
+
             <add-to-group group-id="EditorPopupMenu" anchor="first"/>
             <add-to-group group-id="ProjectViewPopupMenu" anchor="first"/>
         </group>
-        
-        <!-- 也将搜索功能添加到 Tools 菜单 -->
+
         <action id="com.github.jeraxxxxxxx.httpmate.actions.RestApiSearchAction.ToolsMenu"
                 class="com.github.jeraxxxxxxx.httpmate.actions.RestApiSearchAction"
                 text="Search REST APIs"

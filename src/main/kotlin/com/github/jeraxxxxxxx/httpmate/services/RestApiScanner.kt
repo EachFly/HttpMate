@@ -5,9 +5,13 @@ import com.github.jeraxxxxxxx.httpmate.model.RestApiItem
 import com.github.jeraxxxxxxx.httpmate.ui.RestApiIcons
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.progress.ProgressManager
 import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.PsiAnnotation
+import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiMethod
 import com.intellij.psi.SmartPointerManager
+import com.intellij.psi.SmartPsiElementPointer
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.searches.AnnotatedElementsSearch
 
@@ -27,33 +31,56 @@ class RestApiScanner(private val project: Project) {
      * 扫描项目中的所有 REST API
      * @return REST API 列表
      */
-    fun scan(): List<RestApiItem> {
-        val items = mutableListOf<RestApiItem>()
+    fun collectApiCandidates(): List<SmartPsiElementPointer<PsiMethod>> {
         val scope = GlobalSearchScope.projectScope(project)
         val javaPsiFacade = JavaPsiFacade.getInstance(project)
-        val processedMethods = mutableSetOf<com.intellij.psi.PsiMethod>()
+        val processedMethods = mutableSetOf<PsiMethod>()
+        val pointers = mutableListOf<SmartPsiElementPointer<PsiMethod>>()
 
         for (annotationName in RestAnnotations.ALL) {
             try {
                 val annotationClass = javaPsiFacade.findClass(annotationName, scope) ?: continue
                 val annotatedElements = AnnotatedElementsSearch.searchPsiMethods(annotationClass, scope)
-                
-                for (method in annotatedElements.findAll()) {
-                    if (!processedMethods.add(method)) continue
 
-                    val annotation = method.getAnnotation(annotationName) ?: continue
-                    val methodPath = extractPath(method, annotation)
-                    val classPath = extractClassPath(method.containingClass)
-                    val fullPath = combinePaths(classPath, methodPath)
-                    val httpMethod = extractMethod(method, annotationName, annotation)
-                    
-                    val pointer = SmartPointerManager.createPointer(method as com.intellij.psi.PsiElement)
-                    items.add(RestApiItem(httpMethod, fullPath, pointer, RestApiIcons.getIcon(httpMethod)))
+                for (method in annotatedElements) {
+                    ProgressManager.checkCanceled()
+                    if (!processedMethods.add(method)) continue
+                    pointers.add(SmartPointerManager.createPointer(method))
                 }
             } catch (e: Exception) {
                 thisLogger().warn("Error scanning for annotation: $annotationName", e)
             }
         }
+        return pointers
+    }
+
+    fun scanBatch(candidates: List<SmartPsiElementPointer<PsiMethod>>): List<RestApiItem> {
+        val items = mutableListOf<RestApiItem>()
+
+        for (candidate in candidates) {
+            ProgressManager.checkCanceled()
+            val method = candidate.element ?: continue
+            val annotationData = findRestAnnotation(method) ?: continue
+            val (annotationName, annotation) = annotationData
+            val methodPath = extractPath(method, annotation)
+            val classPath = extractClassPath(method.containingClass)
+            val fullPath = combinePaths(classPath, methodPath)
+            val httpMethod = extractMethod(method, annotationName, annotation)
+            val navigationElement = method.navigationElement.takeIf(PsiElement::isValid) ?: method
+            val pointer = SmartPointerManager.createPointer(navigationElement)
+
+            items.add(
+                RestApiItem(
+                    method = httpMethod,
+                    path = fullPath,
+                    fileName = navigationElement.containingFile?.name ?: method.containingFile?.name ?: "",
+                    navigationOffset = navigationElement.textOffset,
+                    elementPointer = pointer,
+                    icon = RestApiIcons.getIcon(httpMethod)
+                )
+            )
+        }
+
         return items
     }
 
@@ -164,6 +191,7 @@ class RestApiScanner(private val project: Project) {
         val psiManager = com.intellij.psi.PsiManager.getInstance(project)
 
         for (virtualFile in allFiles) {
+            ProgressManager.checkCanceled()
             val file = psiManager.findFile(virtualFile) ?: continue
             items.addAll(scanFileForApis(file))
         }
@@ -193,6 +221,7 @@ class RestApiScanner(private val project: Project) {
         // Find method mappings
         val matches = requestMappingRegex.findAll(text)
         for (match in matches) {
+            ProgressManager.checkCanceled()
             val annotationType = match.groupValues[1]
             val path = match.groupValues[2]
             
@@ -209,9 +238,30 @@ class RestApiScanner(private val project: Project) {
             val offset = match.range.first
             val element = file.findElementAt(offset) ?: file
             val pointer = SmartPointerManager.createPointer(element)
-            items.add(RestApiItem(method, fullPath, pointer, RestApiIcons.getIcon(method)))
+            items.add(
+                RestApiItem(
+                    method = method,
+                    path = fullPath,
+                    fileName = file.name,
+                    navigationOffset = offset,
+                    elementPointer = pointer,
+                    icon = RestApiIcons.getIcon(method)
+                )
+            )
         }
         return items
+    }
+
+    private fun findRestAnnotation(method: PsiMethod): Pair<String, PsiAnnotation>? {
+        for (annotation in method.annotations) {
+            if (!RestAnnotations.matches(annotation)) continue
+
+            val annotationName = annotation.qualifiedName
+                ?: RestAnnotations.ALL.firstOrNull { it.endsWith(".${annotation.nameReferenceElement?.referenceName}") }
+                ?: continue
+            return annotationName to annotation
+        }
+        return null
     }
 
     private fun refineMethodFromContext(annotationType: String, match: MatchResult, text: String, defaultMethod: String): String {

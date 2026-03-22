@@ -1,5 +1,7 @@
 package com.github.jeraxxxxxxx.httpmate.constants
 
+import com.intellij.psi.PsiAnnotation
+
 /**
  * REST API 相关注解常量
  */
@@ -45,6 +47,8 @@ object RestAnnotations {
     // ========== 所有注解 ==========
     
     val ALL = SPRING_MAPPINGS + JAXRS_JAVAX + JAXRS_JAKARTA
+
+    val SIMPLE_NAMES = ALL.map { it.substringAfterLast('.') }.toSet()
     
     // ========== 类级别路径注解 ==========
     
@@ -53,6 +57,16 @@ object RestAnnotations {
         "javax.ws.rs.Path",
         "jakarta.ws.rs.Path"
     )
+
+    fun matches(annotation: PsiAnnotation): Boolean {
+        val qualifiedName = annotation.qualifiedName
+        if (qualifiedName != null && qualifiedName in ALL) {
+            return true
+        }
+
+        val shortName = annotation.nameReferenceElement?.referenceName
+        return shortName != null && shortName in SIMPLE_NAMES
+    }
 }
 
 /**

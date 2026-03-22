@@ -1,5 +1,6 @@
 package com.github.jeraxxxxxxx.httpmate.actions
 
+import com.github.jeraxxxxxxx.httpmate.HttpMateBundle
 import com.github.jeraxxxxxxx.httpmate.model.RestApiItem
 import com.github.jeraxxxxxxx.httpmate.services.RestApiScanner
 import com.github.jeraxxxxxxx.httpmate.ui.RestApiSearchDialog
@@ -32,37 +33,56 @@ class RestApiSearchAction : AnAction() {
         if (DumbService.isDumb(project)) {
             Messages.showWarningDialog(
                 project,
-                "Indexing in progress. Please wait until indexing is finished.",
-                "Rest API Search"
+                HttpMateBundle.message("rest.search.indexing.message"),
+                HttpMateBundle.message("rest.search.title")
             )
             return
         }
 
-        ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Scanning REST APIs...", true) {
+        ProgressManager.getInstance().run(object : Task.Backgroundable(project, HttpMateBundle.message("rest.search.progress.title"), true) {
             override fun run(indicator: ProgressIndicator) {
-                indicator.isIndeterminate = true
+                indicator.isIndeterminate = false
 
                 val items = try {
-                    ReadAction.compute<List<RestApiItem>, Exception> {
-                        val scanner = RestApiScanner(project)
-                        var result = scanner.scan()
-
-                        if (result.isEmpty()) {
-                            indicator.text = "Trying fallback scan..."
-                            thisLogger().info("Standard scan returned 0 items. Trying fallback scan.")
-                            result = scanner.scanFallback()
-                        }
-
-                        thisLogger().info("Scanned ${result.size} items")
-                        result
+                    val scanner = RestApiScanner(project)
+                    val candidates = ReadAction.compute<List<com.intellij.psi.SmartPsiElementPointer<com.intellij.psi.PsiMethod>>, Exception> {
+                        scanner.collectApiCandidates()
                     }
+
+                    val result = mutableListOf<RestApiItem>()
+                    val batches = candidates.chunked(200)
+                    val totalBatches = batches.size.coerceAtLeast(1)
+
+                    batches.forEachIndexed { index, batch ->
+                        indicator.checkCanceled()
+                        indicator.text = HttpMateBundle.message("rest.search.progress.title")
+                        indicator.text2 = HttpMateBundle.message("rest.search.progress.batch", index + 1, totalBatches)
+                        indicator.fraction = (index + 1).toDouble() / totalBatches
+
+                        result += ReadAction.compute<List<RestApiItem>, Exception> {
+                            scanner.scanBatch(batch)
+                        }
+                    }
+
+                    if (result.isEmpty()) {
+                        indicator.text = HttpMateBundle.message("rest.search.progress.fallback")
+                        indicator.text2 = HttpMateBundle.message("rest.search.progress.files")
+                        thisLogger().info("Standard scan returned 0 items. Trying fallback scan.")
+                        result.clear()
+                        result.addAll(ReadAction.compute<List<RestApiItem>, Exception> {
+                            scanner.scanFallback()
+                        })
+                    }
+
+                    thisLogger().info("Scanned ${result.size} items")
+                    result
                 } catch (ex: Exception) {
                     thisLogger().error("Error during REST API scan", ex)
                     ApplicationManager.getApplication().invokeLater {
                         Messages.showErrorDialog(
                             project,
-                            "Error scanning for REST APIs: ${ex.message}",
-                            "Rest API Search Error"
+                            HttpMateBundle.message("rest.search.error.message", ex.message ?: "Unknown error"),
+                            HttpMateBundle.message("rest.search.error.title")
                         )
                     }
                     return

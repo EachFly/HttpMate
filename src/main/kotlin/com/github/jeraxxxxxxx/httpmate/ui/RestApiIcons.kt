@@ -6,6 +6,7 @@ import java.awt.Component
 import java.awt.Graphics
 import java.awt.Graphics2D
 import java.awt.RenderingHints
+import java.util.concurrent.ConcurrentHashMap
 import javax.swing.Icon
 
 class MethodIcon(private val method: String) : Icon {
@@ -40,7 +41,7 @@ class MethodIcon(private val method: String) : Icon {
 }
 
 object RestApiIcons {
-    private val iconCache = mutableMapOf<String, Icon>()
+    private val iconCache = ConcurrentHashMap<String, Icon>()
 
     fun getIcon(method: String): Icon {
         return iconCache.getOrPut(method.uppercase()) { MethodIcon(method) }

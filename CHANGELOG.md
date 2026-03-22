@@ -1,5 +1,21 @@
 # HttpMate Changelog
 
+## [0.0.17] - 2026-03-22
+
+### Fixed
+
+- Refined action context resolution so class-level JSON generation also works for Java record files.
+- Stabilized class-level API documentation generation on the first right-click invocation by committing documents before resolving PSI and reloading PSI from smart pointers in background tasks.
+- Improved REST annotation detection to recognize annotations even when only short names are immediately available during PSI resolution.
+
+### Improved
+
+- Reworked REST API scanning to avoid one long read action by collecting candidates first and resolving them in batches.
+- Removed PSI access from search result rendering hot paths by snapshotting display data up front.
+- Moved JSON and API documentation generation off the EDT into background tasks.
+- Cleaned up document generation output, restored readable section titles, and reduced field expansion noise to class-local instance fields.
+- Added regression tests for REST scanning, Markdown generation, record-class context resolution, and method-priority action resolution.
+
 ## [0.0.16] - 2026-03-19
 
 ### Improved / 优化
