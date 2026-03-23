@@ -7,86 +7,185 @@
 ![Build](https://github.com/EachFly/HttpMate/workflows/Build/badge.svg)
 
 <!-- Plugin description -->
-**HttpMate** is a powerful IntelliJ IDEA plugin designed to help developers quickly search and navigate to REST APIs within their projects. It supports Spring Boot and JAX-RS frameworks, offering a seamless experience similar to "Search Everywhere".
+## 📝 项目简介 (Project Overview)
 
-**HttpMate** 是一个强大的 IntelliJ IDEA 插件，旨在帮助开发者快速搜索并跳转到项目中的 REST API 定义。它支持 Spring Boot 和 JAX-RS 框架，提供类似 "Search Everywhere" 的流畅体验。
+**HttpMate** 是一个 IntelliJ IDEA 插件，用于在 Java/Kotlin 项目中提升 REST API 开发效率。  
+它聚焦三个高频场景：
 
----
+- 快速检索并跳转 REST 接口定义（类似 IDE 内搜索即跳转体验）
+- 基于类结构一键生成 JSON / Mock JSON
+- 基于控制器方法自动生成 Markdown 接口文档
 
-## Features / 功能特性
+插件当前通过 PSI + 注解扫描实现对 **Spring Web** 与 **JAX-RS（javax / jakarta）** 的接口识别，并在 IDE 内完成交互与导航。
 
-- **REST API Search / 接口搜索**:
-  - `Ctrl + \` (or `Ctrl + Alt + H`) to search Spring Boot & JAX-RS APIs.
-  - `Ctrl + \` (或 `Ctrl + Alt + H`) 快速搜索 Spring Boot 和 JAX-RS 接口。
-- **JSON Generation / JSON 生成**:
-  - Right-click on a class -> "Http-Mate Generate JSON" to generate data file.
-  - 右键点击类名 -> "Http-Mate Generate JSON" 生成对应的 JSON 数据文件。
-- **API Documentation / 接口文档生成**:
-  - Right-click on a method or class -> "Http-Mate Generate API Doc" to generate Markdown documentation.
-  - 右键点击方法或类名 -> "Http-Mate Generate API Doc" 生成 Markdown 格式的接口文档。
-  - 📖 [查看详细功能指南](docs/API_DOCUMENTATION_GUIDE.md)
-- **Smart Navigation / 智能跳转**:
-  - Press `Enter` to jump to code definition.
-  - 按 `Enter` 键直接跳转到代码定义处。
+## ✨ 主要特性 (Key Features)
+
+1. **REST API 全局搜索与跳转**
+   - 快捷键：`Ctrl + \` 或 `Ctrl + Alt + H`
+   - 支持按路径/方法模糊子序列匹配，`Enter` 直接跳转到接口定义
+2. **注解级接口识别（Spring + JAX-RS）**
+   - 支持 `@GetMapping/@PostMapping/.../@RequestMapping`
+   - 支持 `@Path/@GET/@POST/...`（`javax.ws.rs` 与 `jakarta.ws.rs`）
+3. **JSON 结构生成**
+   - 右键类生成结构化 JSON，递归展开字段并处理基础类型、集合、Map、枚举、时间类型
+4. **Mock JSON 数据生成**
+   - 基于字段类型生成随机示例数据，便于接口联调与文档示例编写
+5. **Markdown API 文档生成**
+   - 支持按方法或按类批量生成文档，包含接口信息、参数表、响应字段与请求/响应示例
 <!-- Plugin description end -->
 
-## Development & Debugging / 开发与调试
+## 🛠️ 技术栈 (Tech Stack)
 
-If you want to contribute or debug the plugin locally:
-如果您想在本地贡献代码或调试插件：
+| 类别 | 技术/库 | 版本 |
+| --- | --- | --- |
+| 语言 | Kotlin (JVM) | `2.3.20` |
+| 运行时 | Java Toolchain | `21` |
+| 构建工具 | Gradle Wrapper | `9.0.0` |
+| IntelliJ 插件构建 | `org.jetbrains.intellij.platform` | `2.13.1` |
+| 目标 IDE 平台 | IntelliJ IDEA Community (`IC`) | `2024.3.6` |
+| 测试 | JUnit | `4.13.2` |
+| 覆盖率 | Kover | `0.9.7` |
+| 代码检查 | Qodana Gradle Plugin | `2025.3.2` |
 
-1. **Clone the repository / 克隆仓库**:
+> 兼容基线由插件配置控制：`sinceBuild = 243`（IntelliJ 2024.3+）。
 
-    ```bash
-    git clone https://github.com/EachFly/HttpMate.git
-    cd HttpMate
-    ```
+## 🚀 快速开始 (Quick Start)
 
-2. **Run the IDE / 运行 IDE**:
-    Run the following command to start a sandboxed IntelliJ IDEA instance with the plugin installed:
-    运行以下命令以启动安装了该插件的沙盒版 IntelliJ IDEA：
+### 环境前置
 
-    ```bash
-    ./gradlew runIde
-    ```
+- JDK `21+`
+- IntelliJ IDEA `2024.3+`（用于运行/调试插件）
 
-    *Note: This may take some time on the first run as it downloads the IDE distribution.*
-    *注意：首次运行可能需要一些时间，因为它会下载 IDE 发行版。*
+### 安装指南
 
----
+```bash
+git clone https://github.com/EachFly/HttpMate.git
+cd HttpMate
+```
 
-## Packaging & Installation / 打包与安装
+### 运行指令
 
-To build the plugin and install it into your daily IntelliJ IDEA:
-要构建插件并将其安装到您日常使用的 IntelliJ IDEA 中：
+macOS / Linux:
 
-1. **Build the Plugin / 构建插件**:
+```bash
+./gradlew runIde
+```
 
-    ```bash
-    ./gradlew buildPlugin
-    ```
+Windows (PowerShell):
 
-    The plugin distribution file will be generated at:
-    插件发行包将生成于：
-    `build/distributions/HttpMate-0.0.1.zip`
+```powershell
+.\gradlew.bat runIde
+```
 
-2. **Install from Disk / 从磁盘安装**:
-    - Open IntelliJ IDEA **Settings** (`Ctrl + Alt + S`).
-    - Go to **Plugins** -> **Gear Icon** ⚙️ -> **Install Plugin from Disk...**.
-    - Select the generated `.zip` file.
-    - Restart IDEA.
-    - 打开 IntelliJ IDEA **设置** (`Ctrl + Alt + S`)。
-    - 进入 **Plugins** -> **齿轮图标** ⚙️ -> **Install Plugin from Disk...**。
-    - 选择生成的 `.zip` 文件。
-    - 重启 IDEA。
+常用命令：
 
----
+```bash
+# 构建插件包（zip）
+./gradlew buildPlugin
 
-## Requirements / 环境要求
+# 运行测试与检查
+./gradlew check
 
-- JDK 17 or later
-- IntelliJ IDEA 2023.1 or later
+# 插件结构与兼容性校验
+./gradlew verifyPlugin
+```
 
-## License / 许可证
+构建产物默认位于：
 
-Licensed under the Apache License, Version 2.0.
+```text
+build/distributions/
+```
+
+### 配置说明
+
+当前项目**没有** `.env` 或 `.env.example`，核心配置通过 `gradle.properties` 管理。  
+常用配置示例（节选）：
+
+```properties
+pluginName = HttpMate
+pluginVersion = 1.0.0
+platformType = IC
+platformVersion = 2024.3.6
+pluginSinceBuild = 243
+```
+
+插件运行后生成内容默认输出到项目目录：
+
+```text
+http-mate/
+├─ <ClassName>.json
+└─ docs/
+   ├─ <ClassName>_<methodName>.md
+   └─ <ClassName>.md
+```
+
+## 💡 使用示例 (Usage Examples)
+
+### 1) 搜索并跳转 REST API
+
+在 IDE 中按 `Ctrl + \`（或 `Ctrl + Alt + H`），输入例如 `g u s e r`（子序列匹配），选择结果后按 `Enter` 跳转到对应方法。
+
+### 2) 生成 JSON / Mock JSON
+
+在项目视图中右键某个 Java/Kotlin 类：
+
+- `HttpMate -> Generate JSON`
+- `HttpMate -> Generate Mock JSON`
+
+生成文件示例（`http-mate/UserDTO.json`）：
+
+```json
+{
+  "id": 0,
+  "name": "",
+  "tags": []
+}
+```
+
+### 3) 生成 API 文档
+
+在 Controller 方法或类上右键：
+
+- `HttpMate -> Generate API Doc`
+
+生成文档示例路径：
+
+```text
+http-mate/docs/UserController_getUser.md
+http-mate/docs/UserController.md
+```
+
+## 📂 项目结构 (Project Structure)
+
+```text
+HttpMate/
+├─ src/
+│  ├─ main/
+│  │  ├─ kotlin/com/github/jeraxxxxxxx/httpmate/
+│  │  │  ├─ actions/      # 插件动作入口（搜索、JSON生成、文档生成）
+│  │  │  ├─ services/     # 接口扫描与项目级服务
+│  │  │  ├─ doc/          # Markdown 文档生成
+│  │  │  ├─ generator/    # JSON / Mock JSON 生成器
+│  │  │  ├─ ui/           # 搜索对话框与图标
+│  │  │  ├─ model/        # 数据模型
+│  │  │  └─ constants/    # 注解与通用常量
+│  │  └─ resources/
+│  │     ├─ META-INF/plugin.xml      # 插件声明与动作注册
+│  │     └─ messages/MyBundle.properties
+│  └─ test/
+│     └─ kotlin/.../MyPluginTest.kt  # 核心行为测试
+├─ build.gradle.kts
+├─ gradle.properties
+└─ CHANGELOG.md
+```
+
+## 🤝 贡献与许可 (Contributing & License)
+
+欢迎提交 Issue 与 PR，一般流程如下：
+
+1. Fork 仓库并创建分支
+2. 完成功能或修复并补充测试
+3. 本地运行 `./gradlew check` 与 `./gradlew verifyPlugin`
+4. 提交 PR 并说明变更动机与影响范围
+
+许可证（License）：**待补充**（仓库根目录当前未找到 `LICENSE` 文件）。
