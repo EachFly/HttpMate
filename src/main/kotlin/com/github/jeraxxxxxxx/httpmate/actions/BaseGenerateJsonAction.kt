@@ -5,7 +5,6 @@ import com.github.jeraxxxxxxx.httpmate.generator.JsonGenerator
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
-import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
@@ -16,7 +15,6 @@ import com.intellij.openapi.util.Computable
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.PsiDocumentManager
-import com.intellij.psi.PsiClass
 import com.intellij.psi.SmartPointerManager
 import java.io.File
 
@@ -41,12 +39,15 @@ abstract class BaseGenerateJsonAction : AnAction() {
                     indicator.isIndeterminate = true
 
                     try {
-                    val result = ApplicationManager.getApplication().runReadAction(Computable<Pair<String, String>?> {
-                        val targetClass = classPointer.element ?: return@Computable null
-                        val className = targetClass.name ?: "Unknown"
-                        val generator = getGenerator()
-                        className to generator.generate(JavaPsiFacade.getElementFactory(project).createType(targetClass), 0)
-                    }) ?: return
+                        val result =
+                            ApplicationManager.getApplication().runReadAction(Computable<Pair<String, String>?> {
+                                val targetClass = classPointer.element ?: return@Computable null
+                                val className = targetClass.name ?: "Unknown"
+                                val generator = getGenerator()
+                                className to generator.generate(
+                                    JavaPsiFacade.getElementFactory(project).createType(targetClass), 0
+                                )
+                            }) ?: return
                         saveJsonToFile(project, result.first, result.second)
                     } catch (ex: Exception) {
                         ApplicationManager.getApplication().invokeLater {
@@ -78,7 +79,11 @@ abstract class BaseGenerateJsonAction : AnAction() {
                 ApplicationManager.getApplication().invokeLater {
                     Messages.showErrorDialog(
                         project,
-                        HttpMateBundle.message("action.generate.error", "JSON", "Failed to create directory: ${targetDir.absolutePath}"),
+                        HttpMateBundle.message(
+                            "action.generate.error",
+                            "JSON",
+                            "Failed to create directory: ${targetDir.absolutePath}"
+                        ),
                         HttpMateBundle.message("dialog.error.title")
                     )
                 }

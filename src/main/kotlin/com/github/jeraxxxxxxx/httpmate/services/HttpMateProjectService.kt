@@ -16,32 +16,32 @@ import java.util.concurrent.atomic.AtomicInteger
 class HttpMateProjectService(private val project: Project) {
 
     // ========== 配置项 ==========
-    
+
     /** 文档输出目录,相对于项目根目录 */
     var docOutputDir: String = "http-mate/docs"
-    
+
     // ========== 统计信息 ==========
-    
+
     /** 最后一次生成文档的时间戳 */
     @Volatile
     var lastGenerationTime: Long = 0
         private set
-    
+
     /** 总共生成的文档数量 */
     private val _totalDocsGenerated = AtomicInteger(0)
     val totalDocsGenerated: Int get() = _totalDocsGenerated.get()
-    
+
     /** 已生成的文档文件列表 */
     private val generatedFiles = ConcurrentHashMap.newKeySet<String>()
-    
+
     // ========== 初始化 ==========
-    
+
     init {
         thisLogger().info("HttpMate project service initialized for project: ${project.name}")
     }
-    
+
     // ========== 工具方法 ==========
-    
+
     /**
      * 获取文档输出的完整绝对路径
      */
@@ -49,7 +49,7 @@ class HttpMateProjectService(private val project: Project) {
         val basePath = project.basePath ?: ""
         return File(basePath, docOutputDir).absolutePath
     }
-    
+
     /**
      * 记录文档生成（线程安全）
      */
@@ -59,7 +59,7 @@ class HttpMateProjectService(private val project: Project) {
         generatedFiles.add(fileName)
         thisLogger().info("Document generated: $fileName (Total: ${_totalDocsGenerated.get()})")
     }
-    
+
     /**
      * 获取已生成的文档列表
      */

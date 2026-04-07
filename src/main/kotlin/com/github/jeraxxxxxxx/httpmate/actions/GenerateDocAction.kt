@@ -60,19 +60,29 @@ class GenerateDocAction : AnAction() {
         return ActionContextResolver.resolvePsiMethod(e)
     }
 
-    private fun generateMethodDocAsync(project: Project, psiMethodPointer: com.intellij.psi.SmartPsiElementPointer<PsiMethod>) {
+    private fun generateMethodDocAsync(
+        project: Project,
+        psiMethodPointer: com.intellij.psi.SmartPsiElementPointer<PsiMethod>
+    ) {
         ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Generating API Doc...", true) {
             override fun run(indicator: ProgressIndicator) {
                 indicator.isIndeterminate = true
 
                 try {
-                    val result = ApplicationManager.getApplication().runReadAction(Computable<Triple<String, String, String>?> {
-                        val psiMethod = psiMethodPointer.element ?: return@Computable null
-                        val className = psiMethod.containingClass?.name ?: "Unknown"
-                        val methodName = psiMethod.name
-                        val fileName = "${className}_${methodName}"
-                        Triple(fileName, "${project.getService(HttpMateProjectService::class.java).getDocOutputPath()}/$fileName.md", docGenerator.generate(psiMethod))
-                    }) ?: return
+                    val result =
+                        ApplicationManager.getApplication().runReadAction(Computable<Triple<String, String, String>?> {
+                            val psiMethod = psiMethodPointer.element ?: return@Computable null
+                            val className = psiMethod.containingClass?.name ?: "Unknown"
+                            val methodName = psiMethod.name
+                            val fileName = "${className}_${methodName}"
+                            Triple(
+                                fileName,
+                                "${
+                                    project.getService(HttpMateProjectService::class.java).getDocOutputPath()
+                                }/$fileName.md",
+                                docGenerator.generate(psiMethod)
+                            )
+                        }) ?: return
 
                     saveDocToFileAsync(project, result.first, result.third) {
                         val service = project.getService(HttpMateProjectService::class.java)
@@ -90,27 +100,31 @@ class GenerateDocAction : AnAction() {
         })
     }
 
-    private fun generateClassDocAsync(project: Project, psiClassPointer: com.intellij.psi.SmartPsiElementPointer<PsiClass>) {
+    private fun generateClassDocAsync(
+        project: Project,
+        psiClassPointer: com.intellij.psi.SmartPsiElementPointer<PsiClass>
+    ) {
         ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Generating API Doc...", true) {
             override fun run(indicator: ProgressIndicator) {
                 indicator.isIndeterminate = true
 
                 try {
-                    val result = ApplicationManager.getApplication().runReadAction(Computable<Triple<String, Int, String>?> {
-                        val psiClass = psiClassPointer.element ?: return@Computable null
-                        val className = psiClass.name ?: "Unknown"
-                        val built = buildClassDoc(psiClass) ?: return@Computable null
-                        Triple(built.first, built.second, className)
-                    }) ?: run {
-                        ApplicationManager.getApplication().invokeLater {
-                            Messages.showInfoMessage(
-                                project,
-                                HttpMateBundle.message("doc.generate.class.empty"),
-                                HttpMateBundle.message("dialog.info.title")
-                            )
+                    val result =
+                        ApplicationManager.getApplication().runReadAction(Computable<Triple<String, Int, String>?> {
+                            val psiClass = psiClassPointer.element ?: return@Computable null
+                            val className = psiClass.name ?: "Unknown"
+                            val built = buildClassDoc(psiClass) ?: return@Computable null
+                            Triple(built.first, built.second, className)
+                        }) ?: run {
+                            ApplicationManager.getApplication().invokeLater {
+                                Messages.showInfoMessage(
+                                    project,
+                                    HttpMateBundle.message("doc.generate.class.empty"),
+                                    HttpMateBundle.message("dialog.info.title")
+                                )
+                            }
+                            return
                         }
-                        return
-                    }
 
                     val className = result.third
                     val service = project.getService(HttpMateProjectService::class.java)
@@ -120,7 +134,12 @@ class GenerateDocAction : AnAction() {
                         service.recordGeneration("$className.md")
                         Messages.showInfoMessage(
                             project,
-                            HttpMateBundle.message("doc.generate.class.success", result.second, className, targetFile.absolutePath),
+                            HttpMateBundle.message(
+                                "doc.generate.class.success",
+                                result.second,
+                                className,
+                                targetFile.absolutePath
+                            ),
                             HttpMateBundle.message("dialog.success.title")
                         )
                     }
@@ -184,7 +203,11 @@ class GenerateDocAction : AnAction() {
                     ApplicationManager.getApplication().invokeLater {
                         Messages.showErrorDialog(
                             project,
-                            HttpMateBundle.message("action.generate.error", "API documentation", "Failed to create directory: ${targetDir.absolutePath}"),
+                            HttpMateBundle.message(
+                                "action.generate.error",
+                                "API documentation",
+                                "Failed to create directory: ${targetDir.absolutePath}"
+                            ),
                             HttpMateBundle.message("dialog.error.title")
                         )
                     }
@@ -208,7 +231,11 @@ class GenerateDocAction : AnAction() {
         ApplicationManager.getApplication().invokeLater {
             Messages.showErrorDialog(
                 project,
-                HttpMateBundle.message("action.generate.error", "API documentation", throwable.message ?: "Unknown error"),
+                HttpMateBundle.message(
+                    "action.generate.error",
+                    "API documentation",
+                    throwable.message ?: "Unknown error"
+                ),
                 HttpMateBundle.message("dialog.error.title")
             )
         }

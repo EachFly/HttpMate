@@ -6,9 +6,9 @@ import com.intellij.psi.PsiAnnotation
  * REST API 相关注解常量
  */
 object RestAnnotations {
-    
+
     // ========== Spring Boot 注解 ==========
-    
+
     val SPRING_MAPPINGS = listOf(
         "org.springframework.web.bind.annotation.RequestMapping",
         "org.springframework.web.bind.annotation.GetMapping",
@@ -17,9 +17,9 @@ object RestAnnotations {
         "org.springframework.web.bind.annotation.DeleteMapping",
         "org.springframework.web.bind.annotation.PatchMapping"
     )
-    
+
     // ========== JAX-RS 注解 (javax) ==========
-    
+
     val JAXRS_JAVAX = listOf(
         "javax.ws.rs.Path",
         "javax.ws.rs.GET",
@@ -30,9 +30,9 @@ object RestAnnotations {
         "javax.ws.rs.HEAD",
         "javax.ws.rs.OPTIONS"
     )
-    
+
     // ========== JAX-RS 注解 (jakarta) ==========
-    
+
     val JAXRS_JAKARTA = listOf(
         "jakarta.ws.rs.Path",
         "jakarta.ws.rs.GET",
@@ -43,15 +43,15 @@ object RestAnnotations {
         "jakarta.ws.rs.HEAD",
         "jakarta.ws.rs.OPTIONS"
     )
-    
+
     // ========== 所有注解 ==========
-    
+
     val ALL = SPRING_MAPPINGS + JAXRS_JAVAX + JAXRS_JAKARTA
 
     val SIMPLE_NAMES = ALL.map { it.substringAfterLast('.') }.toSet()
-    
+
     // ========== 类级别路径注解 ==========
-    
+
     val CLASS_PATH_ANNOTATIONS = listOf(
         "org.springframework.web.bind.annotation.RequestMapping",
         "javax.ws.rs.Path",
@@ -75,13 +75,13 @@ object RestAnnotations {
 object AppConstants {
     /** 搜索结果最大显示数量 */
     const val MAX_SEARCH_RESULTS = 50
-    
+
     /** JSON 生成最大递归深度 */
     const val MAX_JSON_RECURSION_DEPTH = 5
-    
+
     /** 嵌套类型最大深度 */
     const val MAX_NESTED_TYPE_DEPTH = 3
-    
+
     /** 搜索防抖延迟 (毫秒) */
     const val SEARCH_DEBOUNCE_MS = 300
 }

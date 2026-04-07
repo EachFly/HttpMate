@@ -29,7 +29,8 @@ import javax.swing.event.DocumentEvent
  * REST API 搜索对话框
  * 提供快速搜索和导航到 API 定义的功能
  */
-class RestApiSearchDialog(private val project: Project, private val allItems: List<RestApiItem>) : DialogWrapper(project) {
+class RestApiSearchDialog(private val project: Project, private val allItems: List<RestApiItem>) :
+    DialogWrapper(project) {
 
     private val listModel = javax.swing.DefaultListModel<RestApiItem>()
     private val list = JBList(listModel)
@@ -59,7 +60,7 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
                 filter(searchField.text)
             }
         })
-        
+
         // Handle Enter key in search field to select first item
         searchField.textEditor.addKeyListener(object : KeyAdapter() {
             override fun keyPressed(e: KeyEvent) {
@@ -92,14 +93,15 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
                 appendHighlighted(value.method, currentQuery, SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES)
                 append(" ")
                 appendHighlighted(value.path, currentQuery, SimpleTextAttributes.REGULAR_ATTRIBUTES)
-                
+
                 if (value.fileName.isNotEmpty()) {
                     append(" (${value.fileName})", SimpleTextAttributes.GRAY_ATTRIBUTES)
                 }
                 icon = value.icon
             }
 
-            private val HIGHLIGHT_ATTRIBUTES = SimpleTextAttributes(SimpleTextAttributes.STYLE_BOLD, com.intellij.ui.JBColor.BLUE)
+            private val HIGHLIGHT_ATTRIBUTES =
+                SimpleTextAttributes(SimpleTextAttributes.STYLE_BOLD, com.intellij.ui.JBColor.BLUE)
 
             private fun appendHighlighted(text: String, query: String, baseAttributes: SimpleTextAttributes) {
                 if (query.isEmpty()) {
@@ -109,11 +111,11 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
 
                 val lowerText = text.lowercase()
                 val lowerQuery = query.lowercase()
-                
+
                 var queryIndex = 0
                 val sb = StringBuilder()
                 var lastWasMatch = false
-                
+
                 for (i in text.indices) {
                     val isMatch = queryIndex < lowerQuery.length && lowerText[i] == lowerQuery[queryIndex]
                     if (isMatch) {
@@ -133,13 +135,13 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
                         lastWasMatch = false
                     }
                 }
-                
+
                 if (sb.isNotEmpty()) {
                     append(sb.toString(), if (lastWasMatch) HIGHLIGHT_ATTRIBUTES else baseAttributes)
                 }
             }
         }
-        
+
         list.addMouseListener(object : MouseAdapter() {
             override fun mouseClicked(e: MouseEvent) {
                 if (e.clickCount == 2) {
@@ -147,7 +149,7 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
                 }
             }
         })
-        
+
         list.addKeyListener(object : KeyAdapter() {
             override fun keyPressed(e: KeyEvent) {
                 if (e.keyCode == KeyEvent.VK_ENTER) {
@@ -161,7 +163,7 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
                     e.consume()
                 }
             }
-            
+
             override fun keyTyped(e: KeyEvent) {
                 if (!Character.isISOControl(e.keyChar) && e.keyChar != KeyEvent.CHAR_UNDEFINED) {
                     searchField.requestFocus()
@@ -172,7 +174,7 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
         })
 
         panel.add(JBScrollPane(list), BorderLayout.CENTER)
-        
+
         // Status Label
         statusLabel.border = javax.swing.BorderFactory.createEmptyBorder(2, 5, 2, 5)
         panel.add(statusLabel, BorderLayout.SOUTH)
@@ -189,7 +191,7 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
             } else {
                 allItems.filter {
                     isSubsequence(query, it.path.lowercase()) ||
-                    isSubsequence(query, it.method.lowercase())
+                            isSubsequence(query, it.method.lowercase())
                 }
             }
 
@@ -219,13 +221,18 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
     private fun updateList(items: List<RestApiItem>) {
         listModel.clear()
         items.take(AppConstants.MAX_SEARCH_RESULTS).forEach { listModel.addElement(it) }
-        
+
         if (items.isNotEmpty()) {
             list.selectedIndex = 0
         }
-        
+
         val countText = if (items.size > AppConstants.MAX_SEARCH_RESULTS) {
-            HttpMateBundle.message("rest.search.status.limited", items.size, AppConstants.MAX_SEARCH_RESULTS, allItems.size)
+            HttpMateBundle.message(
+                "rest.search.status.limited",
+                items.size,
+                AppConstants.MAX_SEARCH_RESULTS,
+                allItems.size
+            )
         } else {
             HttpMateBundle.message("rest.search.status.full", items.size, allItems.size)
         }
@@ -246,7 +253,8 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
                     navigatable.navigate(true)
                 } else {
                     element.containingFile?.virtualFile?.let { file ->
-                        com.intellij.openapi.fileEditor.OpenFileDescriptor(project, file, selected.navigationOffset).navigate(true)
+                        com.intellij.openapi.fileEditor.OpenFileDescriptor(project, file, selected.navigationOffset)
+                            .navigate(true)
                     }
                 }
             }

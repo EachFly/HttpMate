@@ -16,9 +16,8 @@ object ActionContextResolver {
         val psiFile = e.getData(CommonDataKeys.PSI_FILE)
         val editor = e.getData(CommonDataKeys.EDITOR)
 
-        return findPsiClass(psiElement)
-            ?: findPsiClass(editor?.caretModel?.offset?.let { psiFile?.findElementAt(it) })
-            ?: findSingleTopLevelClass(psiFile)
+        return findPsiClass(psiElement) ?: findPsiClass(editor?.caretModel?.offset?.let { psiFile?.findElementAt(it) })
+        ?: findSingleTopLevelClass(psiFile)
     }
 
     fun resolvePsiMethod(e: AnActionEvent): PsiMethod? {
@@ -31,13 +30,11 @@ object ActionContextResolver {
     }
 
     internal fun findPsiClass(element: PsiElement?): PsiClass? {
-        return PsiTreeUtil.getParentOfType(element, PsiClass::class.java, false)
-            ?: (element as? PsiClass)
+        return PsiTreeUtil.getParentOfType(element, PsiClass::class.java, false) ?: (element as? PsiClass)
     }
 
     internal fun findPsiMethod(element: PsiElement?): PsiMethod? {
-        return PsiTreeUtil.getParentOfType(element, PsiMethod::class.java, false)
-            ?: (element as? PsiMethod)
+        return PsiTreeUtil.getParentOfType(element, PsiMethod::class.java, false) ?: (element as? PsiMethod)
     }
 
     private fun findSingleTopLevelClass(psiFile: PsiFile?): PsiClass? {

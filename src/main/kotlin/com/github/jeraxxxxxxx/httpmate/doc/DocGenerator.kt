@@ -48,7 +48,8 @@ class DocGenerator {
             append('\n')
 
             append("## 请求示例\n\n")
-            val requestBodyParam = params.find { it.hasAnnotation("org.springframework.web.bind.annotation.RequestBody") }
+            val requestBodyParam =
+                params.find { it.hasAnnotation("org.springframework.web.bind.annotation.RequestBody") }
             if (requestBodyParam != null) {
                 append("```json\n")
                 append(mockJsonGenerator.generate(requestBodyParam.type, 0))
@@ -79,7 +80,13 @@ class DocGenerator {
         append("| --- | --- | --- | --- | --- |\n")
         params.forEach { param ->
             val type = param.type
-            append("| ${param.name} | ${type.presentableText} | ${isRequired(param)} | ${extractLengthConstraint(param)} | ${extractComment(param)} |\n")
+            append(
+                "| ${param.name} | ${type.presentableText} | ${isRequired(param)} | ${extractLengthConstraint(param)} | ${
+                    extractComment(
+                        param
+                    )
+                } |\n"
+            )
 
             val psiClass = PsiTypesUtil.getPsiClass(type)
             if (shouldExpand(psiClass, type)) {
@@ -124,7 +131,13 @@ class DocGenerator {
         append("| --- | --- | --- | --- | --- |\n")
 
         ownInstanceFields(psiClass).forEach { field ->
-            append("| ${field.name} | ${field.type.presentableText} | 否 | ${extractFieldLengthConstraint(field)} | ${extractFieldComment(field)} |\n")
+            append(
+                "| ${field.name} | ${field.type.presentableText} | 否 | ${extractFieldLengthConstraint(field)} | ${
+                    extractFieldComment(
+                        field
+                    )
+                } |\n"
+            )
 
             val nestedClass = PsiTypesUtil.getPsiClass(field.type)
             if (shouldExpand(nestedClass, field.type)) {
@@ -147,12 +160,29 @@ class DocGenerator {
 
             if (name.startsWith("org.springframework.web.bind.annotation")) {
                 when {
-                    name.endsWith("GetMapping") -> { httpMethod = "GET"; path += getPathValue(annotation); break }
-                    name.endsWith("PostMapping") -> { httpMethod = "POST"; path += getPathValue(annotation); break }
-                    name.endsWith("PutMapping") -> { httpMethod = "PUT"; path += getPathValue(annotation); break }
-                    name.endsWith("DeleteMapping") -> { httpMethod = "DELETE"; path += getPathValue(annotation); break }
-                    name.endsWith("PatchMapping") -> { httpMethod = "PATCH"; path += getPathValue(annotation); break }
-                    name.endsWith("RequestMapping") -> { httpMethod = getRequestMethod(annotation); path += getPathValue(annotation); break }
+                    name.endsWith("GetMapping") -> {
+                        httpMethod = "GET"; path += getPathValue(annotation); break
+                    }
+
+                    name.endsWith("PostMapping") -> {
+                        httpMethod = "POST"; path += getPathValue(annotation); break
+                    }
+
+                    name.endsWith("PutMapping") -> {
+                        httpMethod = "PUT"; path += getPathValue(annotation); break
+                    }
+
+                    name.endsWith("DeleteMapping") -> {
+                        httpMethod = "DELETE"; path += getPathValue(annotation); break
+                    }
+
+                    name.endsWith("PatchMapping") -> {
+                        httpMethod = "PATCH"; path += getPathValue(annotation); break
+                    }
+
+                    name.endsWith("RequestMapping") -> {
+                        httpMethod = getRequestMethod(annotation); path += getPathValue(annotation); break
+                    }
                 }
             }
 
@@ -209,9 +239,9 @@ class DocGenerator {
 
     private fun shouldExpand(psiClass: PsiClass?, type: PsiType): Boolean {
         return psiClass != null &&
-            !psiClass.isEnum &&
-            !type.canonicalText.startsWith("java.") &&
-            !isSimpleType(type)
+                !psiClass.isEnum &&
+                !type.canonicalText.startsWith("java.") &&
+                !isSimpleType(type)
     }
 
     private fun ownInstanceFields(psiClass: PsiClass): List<PsiField> {
@@ -225,6 +255,7 @@ class DocGenerator {
             "java.lang.Double", "java.lang.Float", "java.lang.Boolean",
             "java.lang.Byte", "java.lang.Short", "java.lang.Character"
         ) -> true
+
         type.canonicalText.startsWith("java.math.") -> true
         type.canonicalText.startsWith("java.time.") -> true
         type.canonicalText.startsWith("java.util.Date") -> true
@@ -275,7 +306,7 @@ class DocGenerator {
         annotations.forEach { annotation ->
             when {
                 annotation.qualifiedName?.endsWith(".Size") == true ||
-                    annotation.qualifiedName?.endsWith(".Length") == true -> {
+                        annotation.qualifiedName?.endsWith(".Length") == true -> {
                     val min = annotation.findAttributeValue("min")?.text ?: "0"
                     val max = annotation.findAttributeValue("max")?.text ?: ""
                     when {
@@ -283,22 +314,27 @@ class DocGenerator {
                         min != "0" -> constraints += ">= $min"
                     }
                 }
+
                 annotation.qualifiedName?.endsWith(".Min") == true -> {
                     annotation.findAttributeValue("value")?.text?.let { constraints += ">= $it" }
                 }
+
                 annotation.qualifiedName?.endsWith(".Max") == true -> {
                     annotation.findAttributeValue("value")?.text?.let { constraints += "<= $it" }
                 }
+
                 annotation.qualifiedName?.endsWith(".DecimalMin") == true -> {
                     annotation.findAttributeValue("value")?.text?.replace("\"", "")?.takeIf(String::isNotEmpty)?.let {
                         constraints += ">= $it"
                     }
                 }
+
                 annotation.qualifiedName?.endsWith(".DecimalMax") == true -> {
                     annotation.findAttributeValue("value")?.text?.replace("\"", "")?.takeIf(String::isNotEmpty)?.let {
                         constraints += "<= $it"
                     }
                 }
+
                 annotation.qualifiedName?.endsWith(".Pattern") == true -> {
                     annotation.findAttributeValue("regexp")?.text?.replace("\"", "")?.takeIf {
                         it.isNotEmpty() && it.length < 30

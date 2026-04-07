@@ -4,8 +4,8 @@ import com.github.jeraxxxxxxx.httpmate.constants.RestAnnotations
 import com.github.jeraxxxxxxx.httpmate.model.RestApiItem
 import com.github.jeraxxxxxxx.httpmate.ui.RestApiIcons
 import com.intellij.openapi.diagnostic.thisLogger
-import com.intellij.openapi.project.Project
 import com.intellij.openapi.progress.ProgressManager
+import com.intellij.openapi.project.Project
 import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.PsiAnnotation
 import com.intellij.psi.PsiElement
@@ -21,10 +21,12 @@ import com.intellij.util.Processor
  * 扫描项目中的 Spring Boot 和 JAX-RS REST API 定义
  */
 class RestApiScanner(private val project: Project) {
-    
+
     // Regex patterns for fallback scan
-    private val requestMappingRegex = Regex("@(RequestMapping|GetMapping|PostMapping|PutMapping|DeleteMapping|PatchMapping|Path)\\s*\\(\\s*(?:[a-zA-Z0-9_]+\\s*=\\s*)?[\"']([^\"']+)[\"']")
-    private val classMappingRegex = Regex("@(RequestMapping|Path)\\s*\\(\\s*(?:[a-zA-Z0-9_]+\\s*=\\s*)?[\"']([^\"']+)[\"']")
+    private val requestMappingRegex =
+        Regex("@(RequestMapping|GetMapping|PostMapping|PutMapping|DeleteMapping|PatchMapping|Path)\\s*\\(\\s*(?:[a-zA-Z0-9_]+\\s*=\\s*)?[\"']([^\"']+)[\"']")
+    private val classMappingRegex =
+        Regex("@(RequestMapping|Path)\\s*\\(\\s*(?:[a-zA-Z0-9_]+\\s*=\\s*)?[\"']([^\"']+)[\"']")
     private val methodAttributeRegex = Regex("method\\s*=\\s*(?:RequestMethod\\.)?([A-Z]+)")
     private val jaxRsVerbRegex = Regex("@(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)(?![a-zA-Z])")
 
@@ -90,7 +92,7 @@ class RestApiScanner(private val project: Project) {
 
     private fun extractClassPath(psiClass: com.intellij.psi.PsiClass?): String {
         if (psiClass == null) return ""
-        
+
         for (annotationName in RestAnnotations.CLASS_PATH_ANNOTATIONS) {
             val annotation = psiClass.getAnnotation(annotationName)
             if (annotation != null) {
@@ -103,11 +105,11 @@ class RestApiScanner(private val project: Project) {
     private fun combinePaths(classPath: String, methodPath: String): String {
         val p1 = if (classPath.startsWith("/")) classPath else "/$classPath"
         val p2 = if (methodPath.startsWith("/")) methodPath else "/$methodPath"
-        
+
         if (p1 == "/" && p2 == "/") return "/"
         if (p1 == "/") return p2
         if (p2 == "/") return p1
-        
+
         return p1 + p2
     }
 
@@ -116,7 +118,7 @@ class RestApiScanner(private val project: Project) {
         // We need to look for @Path on the method.
         val qName = annotation.qualifiedName ?: ""
         if (isJaxRsVerb(qName)) {
-            val pathAnnotation = method.getAnnotation("javax.ws.rs.Path") 
+            val pathAnnotation = method.getAnnotation("javax.ws.rs.Path")
                 ?: method.getAnnotation("jakarta.ws.rs.Path")
             return if (pathAnnotation != null) extractPathFromAnnotation(pathAnnotation) else ""
         }
@@ -127,7 +129,7 @@ class RestApiScanner(private val project: Project) {
         // Try to find 'value' or 'path' attribute
         val valueAttr = annotation.findAttributeValue("value") ?: annotation.findAttributeValue("path")
         var path = valueAttr?.text?.replace("\"", "") ?: ""
-        
+
         // Handle array syntax like {"/api"} -> /api
         if (path.startsWith("{") && path.endsWith("}")) {
             path = path.substring(1, path.length - 1).trim()
@@ -136,13 +138,17 @@ class RestApiScanner(private val project: Project) {
     }
 
     private fun isJaxRsVerb(qName: String): Boolean {
-        return qName.endsWith(".GET") || qName.endsWith(".POST") || 
-               qName.endsWith(".PUT") || qName.endsWith(".DELETE") || 
-               qName.endsWith(".PATCH") || qName.endsWith(".HEAD") || 
-               qName.endsWith(".OPTIONS")
+        return qName.endsWith(".GET") || qName.endsWith(".POST") ||
+                qName.endsWith(".PUT") || qName.endsWith(".DELETE") ||
+                qName.endsWith(".PATCH") || qName.endsWith(".HEAD") ||
+                qName.endsWith(".OPTIONS")
     }
 
-    private fun extractMethod(method: com.intellij.psi.PsiMethod, annotationName: String, annotation: PsiAnnotation): String {
+    private fun extractMethod(
+        method: com.intellij.psi.PsiMethod,
+        annotationName: String,
+        annotation: PsiAnnotation
+    ): String {
         return when (annotationName) {
             "org.springframework.web.bind.annotation.GetMapping" -> "GET"
             "org.springframework.web.bind.annotation.PostMapping" -> "POST"
@@ -150,16 +156,17 @@ class RestApiScanner(private val project: Project) {
             "org.springframework.web.bind.annotation.DeleteMapping" -> "DELETE"
             "org.springframework.web.bind.annotation.PatchMapping" -> "PATCH"
             "org.springframework.web.bind.annotation.RequestMapping" -> {
-                 val methodAttr = annotation.findAttributeValue("method")
-                 val text = methodAttr?.text?.replace("{", "")?.replace("}", "")?.trim() ?: ""
-                 if (text.contains("RequestMethod.")) {
-                     text.substringAfterLast("RequestMethod.").substringBefore(",")
-                 } else if (text.isNotEmpty()) {
-                     text.substringAfterLast(".").substringBefore(",")
-                 } else {
-                     "ALL"
-                 }
+                val methodAttr = annotation.findAttributeValue("method")
+                val text = methodAttr?.text?.replace("{", "")?.replace("}", "")?.trim() ?: ""
+                if (text.contains("RequestMethod.")) {
+                    text.substringAfterLast("RequestMethod.").substringBefore(",")
+                } else if (text.isNotEmpty()) {
+                    text.substringAfterLast(".").substringBefore(",")
+                } else {
+                    "ALL"
+                }
             }
+
             "javax.ws.rs.GET", "jakarta.ws.rs.GET" -> "GET"
             "javax.ws.rs.POST", "jakarta.ws.rs.POST" -> "POST"
             "javax.ws.rs.PUT", "jakarta.ws.rs.PUT" -> "PUT"
@@ -178,6 +185,7 @@ class RestApiScanner(private val project: Project) {
                 if (method.hasAnnotation("javax.ws.rs.OPTIONS") || method.hasAnnotation("jakarta.ws.rs.OPTIONS")) return "OPTIONS"
                 "ALL"
             }
+
             else -> "UNKNOWN"
         }
     }
@@ -199,7 +207,7 @@ class RestApiScanner(private val project: Project) {
             val file = psiManager.findFile(virtualFile) ?: continue
             items.addAll(scanFileForApis(file))
         }
-        
+
         thisLogger().info("Fallback scan found ${items.size} items")
         return items
     }
@@ -214,7 +222,7 @@ class RestApiScanner(private val project: Project) {
     private fun scanFileForApis(file: com.intellij.psi.PsiFile): List<RestApiItem> {
         val items = mutableListOf<RestApiItem>()
         val text = file.text
-        
+
         // Simple heuristic: find class level mapping
         var classPath = ""
         val classMatch = classMappingRegex.find(text)
@@ -228,16 +236,16 @@ class RestApiScanner(private val project: Project) {
             ProgressManager.checkCanceled()
             val annotationType = match.groupValues[1]
             val path = match.groupValues[2]
-            
+
             // Skip if it looks like the class level mapping we just found (crude check)
             if (path == classPath && (annotationType == "RequestMapping" || annotationType == "Path")) continue
 
             val fullPath = combinePaths(classPath, path)
             var method = mapAnnotationToMethod(annotationType)
-            
+
             // Refine method if needed
             method = refineMethodFromContext(annotationType, match, text, method)
-            
+
             // Find the element offset to navigate to
             val offset = match.range.first
             val element = file.findElementAt(offset) ?: file
@@ -268,9 +276,14 @@ class RestApiScanner(private val project: Project) {
         return null
     }
 
-    private fun refineMethodFromContext(annotationType: String, match: MatchResult, text: String, defaultMethod: String): String {
+    private fun refineMethodFromContext(
+        annotationType: String,
+        match: MatchResult,
+        text: String,
+        defaultMethod: String
+    ): String {
         var method = defaultMethod
-        
+
         // If it's RequestMapping, try to find the method attribute
         if (annotationType == "RequestMapping") {
             val range = match.range
@@ -284,7 +297,7 @@ class RestApiScanner(private val project: Project) {
                     if (text[endIndex] == ')') openCount--
                 }
             }
-            
+
             if (endIndex < text.length) {
                 val annotationContent = text.substring(range.first, endIndex + 1)
                 val methodMatch = methodAttributeRegex.find(annotationContent)
@@ -298,7 +311,7 @@ class RestApiScanner(private val project: Project) {
             val startSearch = (match.range.first - 200).coerceAtLeast(0)
             val endSearch = (match.range.last + 200).coerceAtMost(text.length)
             val vicinityText = text.substring(startSearch, endSearch)
-            
+
             val verbMatch = jaxRsVerbRegex.find(vicinityText)
             if (verbMatch != null) {
                 method = verbMatch.groupValues[1]

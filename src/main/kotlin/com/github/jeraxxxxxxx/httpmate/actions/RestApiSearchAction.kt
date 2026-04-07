@@ -39,59 +39,64 @@ class RestApiSearchAction : AnAction() {
             return
         }
 
-        ProgressManager.getInstance().run(object : Task.Backgroundable(project, HttpMateBundle.message("rest.search.progress.title"), true) {
-            override fun run(indicator: ProgressIndicator) {
-                indicator.isIndeterminate = false
+        ProgressManager.getInstance()
+            .run(object : Task.Backgroundable(project, HttpMateBundle.message("rest.search.progress.title"), true) {
+                override fun run(indicator: ProgressIndicator) {
+                    indicator.isIndeterminate = false
 
-                val items = try {
-                    val scanner = RestApiScanner(project)
-                    val candidates = ApplicationManager.getApplication().runReadAction(Computable<List<com.intellij.psi.SmartPsiElementPointer<com.intellij.psi.PsiMethod>>> {
-                        scanner.collectApiCandidates()
-                    })
+                    val items = try {
+                        val scanner = RestApiScanner(project)
+                        val candidates = ApplicationManager.getApplication()
+                            .runReadAction(Computable<List<com.intellij.psi.SmartPsiElementPointer<com.intellij.psi.PsiMethod>>> {
+                                scanner.collectApiCandidates()
+                            })
 
-                    val result = mutableListOf<RestApiItem>()
-                    val batches = candidates.chunked(200)
-                    val totalBatches = batches.size.coerceAtLeast(1)
+                        val result = mutableListOf<RestApiItem>()
+                        val batches = candidates.chunked(200)
+                        val totalBatches = batches.size.coerceAtLeast(1)
 
-                    batches.forEachIndexed { index, batch ->
-                        indicator.checkCanceled()
-                        indicator.text = HttpMateBundle.message("rest.search.progress.title")
-                        indicator.text2 = HttpMateBundle.message("rest.search.progress.batch", index + 1, totalBatches)
-                        indicator.fraction = (index + 1).toDouble() / totalBatches
+                        batches.forEachIndexed { index, batch ->
+                            indicator.checkCanceled()
+                            indicator.text = HttpMateBundle.message("rest.search.progress.title")
+                            indicator.text2 =
+                                HttpMateBundle.message("rest.search.progress.batch", index + 1, totalBatches)
+                            indicator.fraction = (index + 1).toDouble() / totalBatches
 
-                        result += ApplicationManager.getApplication().runReadAction(Computable<List<RestApiItem>> {
-                            scanner.scanBatch(batch)
-                        })
+                            result += ApplicationManager.getApplication().runReadAction(Computable<List<RestApiItem>> {
+                                scanner.scanBatch(batch)
+                            })
+                        }
+
+                        if (result.isEmpty()) {
+                            indicator.text = HttpMateBundle.message("rest.search.progress.fallback")
+                            indicator.text2 = HttpMateBundle.message("rest.search.progress.files")
+                            thisLogger().info("Standard scan returned 0 items. Trying fallback scan.")
+                            result.clear()
+                            result.addAll(
+                                ApplicationManager.getApplication().runReadAction(Computable<List<RestApiItem>> {
+                                    scanner.scanFallback()
+                                })
+                            )
+                        }
+
+                        thisLogger().info("Scanned ${result.size} items")
+                        result
+                    } catch (ex: Exception) {
+                        thisLogger().error("Error during REST API scan", ex)
+                        ApplicationManager.getApplication().invokeLater {
+                            Messages.showErrorDialog(
+                                project,
+                                HttpMateBundle.message("rest.search.error.message", ex.message ?: "Unknown error"),
+                                HttpMateBundle.message("rest.search.error.title")
+                            )
+                        }
+                        return
                     }
 
-                    if (result.isEmpty()) {
-                        indicator.text = HttpMateBundle.message("rest.search.progress.fallback")
-                        indicator.text2 = HttpMateBundle.message("rest.search.progress.files")
-                        thisLogger().info("Standard scan returned 0 items. Trying fallback scan.")
-                        result.clear()
-                        result.addAll(ApplicationManager.getApplication().runReadAction(Computable<List<RestApiItem>> {
-                            scanner.scanFallback()
-                        }))
-                    }
-
-                    thisLogger().info("Scanned ${result.size} items")
-                    result
-                } catch (ex: Exception) {
-                    thisLogger().error("Error during REST API scan", ex)
                     ApplicationManager.getApplication().invokeLater {
-                        Messages.showErrorDialog(
-                            project,
-                            HttpMateBundle.message("rest.search.error.message", ex.message ?: "Unknown error"),
-                            HttpMateBundle.message("rest.search.error.title")
-                        )
+                        RestApiSearchDialog(project, items).show()
                     }
-                    return
                 }
-
-                ApplicationManager.getApplication().invokeLater {
-                    RestApiSearchDialog(project, items).show()
-                }
-            }
-        })
+            })
     }
 }
