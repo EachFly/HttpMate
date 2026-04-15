@@ -1,5 +1,23 @@
 # HttpMate Changelog
 
+## [1.1.0] - 2026-04-15
+
+### Added / 新增
+
+- **Code Line Statistics / 代码行统计**:
+  - Added "Code Line Statistics" action under the HttpMate context menu in Project view.
+  - 在 Project 视图的 HttpMate 右键菜单中新增了「Code Line Statistics」功能。
+  - Right-click any directory or package to recursively analyze all source files.
+  - 右键任意目录或 Package 即可递归分析其下所有源文件。
+  - Counts total lines, code lines, comment lines (`//` and `/* */`), and blank lines with percentages.
+  - 统计总行数、代码行数、注释行数（支持 `//` 和 `/* */`）、空行数及各部分百分比。
+  - Results displayed in a custom dialog with summary panel, color-coded stacked bar chart, and sortable detail table grouped by file extension.
+  - 结果以自定义弹窗展示，包含汇总面板、彩色比例条形图和按文件后缀分组的可排序明细表格。
+  - Supports 25+ file extensions including `.java`, `.kt`, `.xml`, `.json`, `.py`, `.go`, `.rs`, etc.
+  - 支持 25+ 种文件后缀，包括 `.java`、`.kt`、`.xml`、`.json`、`.py`、`.go`、`.rs` 等。
+  - Background execution with progress bar and cancellation support.
+  - 后台执行，带进度条和取消支持。
+
 ## [1.0.0] - 2026-03-22
 
 ### Fixed
