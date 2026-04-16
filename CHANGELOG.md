@@ -1,5 +1,24 @@
 # HttpMate Changelog
 
+## [1.1.1] - 2026-04-16
+
+### Added / 新增
+
+- **Code Line Statistics / 代码行统计**:
+  - Added support for directly analyzing single files.
+  - 添加了直接对单文件进行行数分析的支持。
+  - Added "By File" detail table to view exact percentages for individual files.
+  - 新增 "By File" 详情表，可直观浏览每个独立文件在总行数中的占比。
+- **UI / 界面**:
+  - Added specific UI icons for Code Statistics, Generate JSON, and Generate API Doc actions.
+  - 为代码统计、JSON 生成与 API 文档生成操作设计并添加了专属 UI 图标。
+
+### Improved / 优化
+
+- **Performance / 性能**:
+  - Re-engineered `JTable` data models to use native numeric renderers; table sorting with 50,000+ rows is now absolutely instantaneous.
+  - 重写了底层 `JTable` 数据类型的渲染绑定，原生数值排序让哪怕面对超过 5万 个文件的目录分析，点击表头也能瞬时响应无卡顿。
+
 ## [1.1.0] - 2026-04-15
 
 ### Added / 新增

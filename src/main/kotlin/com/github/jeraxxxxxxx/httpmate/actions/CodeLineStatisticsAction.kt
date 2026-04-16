@@ -24,13 +24,13 @@ class CodeLineStatisticsAction : AnAction() {
     }
 
     override fun update(e: AnActionEvent) {
-        val directory = resolveDirectory(e)
-        e.presentation.isEnabledAndVisible = directory != null
+        val target = resolveTarget(e)
+        e.presentation.isEnabledAndVisible = target != null
     }
 
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
-        val directory = resolveDirectory(e) ?: return
+        val target = resolveTarget(e) ?: return
 
         ProgressManager.getInstance().run(object : Task.Backgroundable(
             project,
@@ -48,18 +48,26 @@ class CodeLineStatisticsAction : AnAction() {
                     "groovy", "gradle", "md", "txt"
                 )
                 val allFiles = mutableListOf<VirtualFile>()
-                VfsUtilCore.visitChildrenRecursively(directory, object : VirtualFileVisitor<Void>() {
-                    override fun visitFile(file: VirtualFile): Boolean {
-                        if (indicator.isCanceled) return false
-                        if (!file.isDirectory) {
-                            val ext = file.extension?.lowercase().orEmpty()
-                            if (ext in targetExtensions) {
-                                allFiles.add(file)
+                
+                if (target.isDirectory) {
+                    VfsUtilCore.visitChildrenRecursively(target, object : VirtualFileVisitor<Void>() {
+                        override fun visitFile(file: VirtualFile): Boolean {
+                            if (indicator.isCanceled) return false
+                            if (!file.isDirectory) {
+                                val ext = file.extension?.lowercase().orEmpty()
+                                if (ext in targetExtensions) {
+                                    allFiles.add(file)
+                                }
                             }
+                            return true
                         }
-                        return true
+                    })
+                } else {
+                    val ext = target.extension?.lowercase().orEmpty()
+                    if (ext in targetExtensions) {
+                        allFiles.add(target)
                     }
-                })
+                }
 
                 if (allFiles.isEmpty()) {
                     ApplicationManager.getApplication().invokeLater {
@@ -103,23 +111,19 @@ class CodeLineStatisticsAction : AnAction() {
                 }
 
                 ApplicationManager.getApplication().invokeLater {
-                    val dialog = CodeLineStatisticsDialog(project, directory.name, fileStatsList)
+                    val dialog = CodeLineStatisticsDialog(project, target.name, fileStatsList)
                     dialog.show()
                 }
             }
         })
     }
 
-    private fun resolveDirectory(e: AnActionEvent): VirtualFile? {
+    private fun resolveTarget(e: AnActionEvent): VirtualFile? {
         val psiElement = e.getData(CommonDataKeys.PSI_ELEMENT)
         if (psiElement is PsiDirectory) {
             return psiElement.virtualFile
         }
-        val virtualFile = e.getData(CommonDataKeys.VIRTUAL_FILE)
-        if (virtualFile != null && virtualFile.isDirectory) {
-            return virtualFile
-        }
-        return null
+        return e.getData(CommonDataKeys.VIRTUAL_FILE)
     }
 
     private fun analyzeFile(content: String, extension: String): LineAnalysisResult {
