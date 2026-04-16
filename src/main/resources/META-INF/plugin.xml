@@ -30,19 +30,22 @@
             <action id="com.github.jeraxxxxxxx.httpmate.actions.GenerateJsonAction"
                     class="com.github.jeraxxxxxxx.httpmate.actions.GenerateJsonAction"
                     text="Generate JSON"
-                    description="Generate JSON for the selected class"/>
+                    description="Generate JSON for the selected class"
+                    icon="/icons/generate_json.svg"/>
 
             <action id="com.github.jeraxxxxxxx.httpmate.actions.GenerateMockJsonAction"
                     class="com.github.jeraxxxxxxx.httpmate.actions.GenerateMockJsonAction"
                     text="Generate Mock JSON"
-                    description="Generate JSON with mock data for the selected class"/>
+                    description="Generate JSON with mock data for the selected class"
+                    icon="/icons/generate_json.svg"/>
 
             <separator/>
 
             <action id="com.github.jeraxxxxxxx.httpmate.actions.GenerateDocAction"
                     class="com.github.jeraxxxxxxx.httpmate.actions.GenerateDocAction"
                     text="Generate API Doc"
-                    description="Generate Markdown documentation for the selected method"/>
+                    description="Generate Markdown documentation for the selected method"
+                    icon="/icons/generate_doc.svg"/>
 
             <separator/>
 
@@ -50,7 +53,7 @@
                     class="com.github.jeraxxxxxxx.httpmate.actions.CodeLineStatisticsAction"
                     text="Code Line Statistics"
                     description="Count lines of code, comments, and blanks in the selected directory"
-                    icon="/icons/httpmate.svg"/>
+                    icon="/icons/code_statistic.svg"/>
 
             <add-to-group group-id="EditorPopupMenu" anchor="first"/>
             <add-to-group group-id="ProjectViewPopupMenu" anchor="first"/>
