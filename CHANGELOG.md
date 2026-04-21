@@ -1,5 +1,21 @@
 # HttpMate Changelog
 
+## [1.1.2] - 2026-04-21
+
+### Added / 新增
+
+- **UI / 界面**:
+  - Created a brand new independent brand logo for HttpMate.
+  - 为 HttpMate 设计了全新的独立品牌 Logo，与 API 搜索功能图标进行了视觉分离。
+
+### Improved / 优化
+
+- **Search / 搜索**:
+  - Implemented an intelligent ranking strategy that prioritizes exact substring matches over fuzzy subsequence matches.
+  - 引入智能打分排序策略，连续子串匹配的结果会优先显示在模糊匹配结果之前。
+  - Enhanced search keyword highlighting to seamlessly highlight continuous substrings.
+  - 优化搜索关键词高亮逻辑，完美支持连续子串的完整高亮。
+
 ## [1.1.1] - 2026-04-16
 
 ### Added / 新增
