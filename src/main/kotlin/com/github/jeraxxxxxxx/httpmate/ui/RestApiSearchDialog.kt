@@ -112,6 +112,18 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
                 val lowerText = text.lowercase()
                 val lowerQuery = query.lowercase()
 
+                val exactIndex = lowerText.indexOf(lowerQuery)
+                if (exactIndex >= 0) {
+                    if (exactIndex > 0) {
+                        append(text.substring(0, exactIndex), baseAttributes)
+                    }
+                    append(text.substring(exactIndex, exactIndex + query.length), HIGHLIGHT_ATTRIBUTES)
+                    if (exactIndex + query.length < text.length) {
+                        append(text.substring(exactIndex + query.length), baseAttributes)
+                    }
+                    return
+                }
+
                 var queryIndex = 0
                 val sb = StringBuilder()
                 var lastWasMatch = false
@@ -189,10 +201,15 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
             val filtered = if (query.isEmpty()) {
                 allItems
             } else {
-                allItems.filter {
-                    isSubsequence(query, it.path.lowercase()) ||
-                            isSubsequence(query, it.method.lowercase())
+                allItems.mapNotNull { item ->
+                    val pathScore = calculateMatchScore(query, item.path.lowercase())
+                    val methodScore = calculateMatchScore(query, item.method.lowercase())
+                    val maxScore = maxOf(pathScore, methodScore)
+                    
+                    if (maxScore >= 0) Pair(item, maxScore) else null
                 }
+                .sortedByDescending { it.second }
+                .map { it.first }
             }
 
             com.intellij.openapi.application.ApplicationManager.getApplication().invokeLater({
@@ -203,6 +220,24 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
                 }
             }, com.intellij.openapi.application.ModalityState.stateForComponent(list))
         }, AppConstants.SEARCH_DEBOUNCE_MS.toLong())
+    }
+
+    private fun calculateMatchScore(query: String, target: String): Int {
+        if (query.isEmpty()) return 0
+        
+        if (target == query) return 100
+        if (target.startsWith(query)) return 80
+        
+        val index = target.indexOf(query)
+        if (index >= 0) {
+            return 70 - index.coerceAtMost(20)
+        }
+        
+        if (isSubsequence(query, target)) {
+            return 20
+        }
+        
+        return -1
     }
 
     private fun isSubsequence(query: String, target: String): Boolean {
