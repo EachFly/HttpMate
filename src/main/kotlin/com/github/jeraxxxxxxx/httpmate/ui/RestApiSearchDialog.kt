@@ -90,7 +90,7 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
                 selected: Boolean,
                 hasFocus: Boolean
             ) {
-                appendHighlighted(value.method, currentQuery, SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES)
+                append(value.method, SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES)
                 append(" ")
                 appendHighlighted(value.path, currentQuery, SimpleTextAttributes.REGULAR_ATTRIBUTES)
 
@@ -203,10 +203,8 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
             } else {
                 allItems.mapNotNull { item ->
                     val pathScore = calculateMatchScore(query, item.path.lowercase())
-                    val methodScore = calculateMatchScore(query, item.method.lowercase())
-                    val maxScore = maxOf(pathScore, methodScore)
                     
-                    if (maxScore >= 0) Pair(item, maxScore) else null
+                    if (pathScore >= 0) Pair(item, pathScore) else null
                 }
                 .sortedByDescending { it.second }
                 .map { it.first }
