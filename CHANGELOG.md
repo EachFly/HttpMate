@@ -1,5 +1,17 @@
 # HttpMate Changelog
 
+## [1.1.3] - 2026-04-24
+
+### Fixed / 修复
+
+- **Search / 搜索**:
+  - Excluded HTTP method types (e.g., GET, POST) from search filtering and highlighting to improve search accuracy.
+  - 在搜索过滤和高亮中排除了 HTTP 方法类型（如 GET、POST），以提高路径搜索的准确性。
+
+### Dependencies / 依赖升级
+
+- Upgraded Kotlin JVM plugin from 2.3.20 to 2.3.21
+
 ## [1.1.2] - 2026-04-21
 
 ### Added / 新增
