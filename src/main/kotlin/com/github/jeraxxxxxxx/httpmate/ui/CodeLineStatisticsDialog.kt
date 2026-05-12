@@ -25,8 +25,8 @@ import javax.swing.table.DefaultTableCellRenderer
  */
 class CodeLineStatisticsDialog(
     project: Project,
-    private val directoryName: String,
-    private val fileStatsList: List<FileStats>
+    directoryName: String,
+    private val fileStatsList: List<FileStats>,
 ) : DialogWrapper(project) {
 
     init {

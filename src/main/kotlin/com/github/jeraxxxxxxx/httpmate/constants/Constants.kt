@@ -9,7 +9,7 @@ object RestAnnotations {
 
     // ========== Spring Boot 注解 ==========
 
-    val SPRING_MAPPINGS = listOf(
+    private val SPRING_MAPPINGS = listOf(
         "org.springframework.web.bind.annotation.RequestMapping",
         "org.springframework.web.bind.annotation.GetMapping",
         "org.springframework.web.bind.annotation.PostMapping",
@@ -20,7 +20,7 @@ object RestAnnotations {
 
     // ========== JAX-RS 注解 (javax) ==========
 
-    val JAXRS_JAVAX = listOf(
+    private val JAXRS_JAVAX = listOf(
         "javax.ws.rs.Path",
         "javax.ws.rs.GET",
         "javax.ws.rs.POST",
@@ -33,7 +33,7 @@ object RestAnnotations {
 
     // ========== JAX-RS 注解 (jakarta) ==========
 
-    val JAXRS_JAKARTA = listOf(
+    private val JAXRS_JAKARTA = listOf(
         "jakarta.ws.rs.Path",
         "jakarta.ws.rs.GET",
         "jakarta.ws.rs.POST",
@@ -48,7 +48,7 @@ object RestAnnotations {
 
     val ALL = SPRING_MAPPINGS + JAXRS_JAVAX + JAXRS_JAKARTA
 
-    val SIMPLE_NAMES = ALL.map { it.substringAfterLast('.') }.toSet()
+    private val SIMPLE_NAMES = ALL.map { it.substringAfterLast('.') }.toSet()
 
     // ========== 类级别路径注解 ==========
 

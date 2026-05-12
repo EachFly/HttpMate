@@ -113,7 +113,7 @@ class RestApiScanner(private val project: Project) {
         return p1 + p2
     }
 
-    private fun extractPath(method: com.intellij.psi.PsiMethod, annotation: PsiAnnotation): String {
+    private fun extractPath(method: PsiMethod, annotation: PsiAnnotation): String {
         // If it's a JAX-RS verb (GET, POST, etc.), it doesn't have a path. 
         // We need to look for @Path on the method.
         val qName = annotation.qualifiedName ?: ""
@@ -145,7 +145,7 @@ class RestApiScanner(private val project: Project) {
     }
 
     private fun extractMethod(
-        method: com.intellij.psi.PsiMethod,
+        method: PsiMethod,
         annotationName: String,
         annotation: PsiAnnotation
     ): String {

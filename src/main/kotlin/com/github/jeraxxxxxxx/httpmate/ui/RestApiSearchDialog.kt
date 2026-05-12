@@ -46,13 +46,13 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
         updateList(allItems)
     }
 
-    override fun getDimensionServiceKey(): String? {
+    override fun getDimensionServiceKey(): String {
         return "HttpMate.RestApiSearchDialog"
     }
 
     override fun createCenterPanel(): JComponent {
         val panel = JPanel(BorderLayout())
-        panel.setPreferredSize(Dimension(600, 400))
+        panel.preferredSize = Dimension(600, 400)
 
         // Search Field
         searchField.addDocumentListener(object : DocumentAdapter() {
@@ -210,7 +210,7 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
                 .map { it.first }
             }
 
-            com.intellij.openapi.application.ApplicationManager.getApplication().invokeLater({
+            ApplicationManager.getApplication().invokeLater({
                 if (!isDisposed) {
                     currentQuery = text.trim()
                     updateList(filtered)

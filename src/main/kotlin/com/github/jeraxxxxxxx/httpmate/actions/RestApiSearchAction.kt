@@ -47,7 +47,7 @@ class RestApiSearchAction : AnAction() {
                     val items = try {
                         val scanner = RestApiScanner(project)
                         val candidates = ApplicationManager.getApplication()
-                            .runReadAction(Computable<List<com.intellij.psi.SmartPsiElementPointer<com.intellij.psi.PsiMethod>>> {
+                            .runReadAction(Computable {
                                 scanner.collectApiCandidates()
                             })
 
@@ -62,7 +62,7 @@ class RestApiSearchAction : AnAction() {
                                 HttpMateBundle.message("rest.search.progress.batch", index + 1, totalBatches)
                             indicator.fraction = (index + 1).toDouble() / totalBatches
 
-                            result += ApplicationManager.getApplication().runReadAction(Computable<List<RestApiItem>> {
+                            result += ApplicationManager.getApplication().runReadAction(Computable {
                                 scanner.scanBatch(batch)
                             })
                         }
@@ -73,7 +73,7 @@ class RestApiSearchAction : AnAction() {
                             thisLogger().info("Standard scan returned 0 items. Trying fallback scan.")
                             result.clear()
                             result.addAll(
-                                ApplicationManager.getApplication().runReadAction(Computable<List<RestApiItem>> {
+                                ApplicationManager.getApplication().runReadAction(Computable {
                                     scanner.scanFallback()
                                 })
                             )
