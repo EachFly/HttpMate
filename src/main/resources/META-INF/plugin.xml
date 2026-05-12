@@ -55,6 +55,16 @@
                     description="Count lines of code, comments, and blanks in the selected directory"
                     icon="/icons/code_statistic.svg"/>
 
+            <separator/>
+
+            <action id="com.github.jeraxxxxxxx.httpmate.actions.ToggleCaseAction"
+                    class="com.github.jeraxxxxxxx.httpmate.actions.ToggleCaseAction"
+                    text="Toggle Case"
+                    description="Toggle naming style of selected text (camelCase, snake_case, PascalCase, etc.)"
+                    icon="/icons/toggle_case.svg">
+                <keyboard-shortcut keymap="$default" first-keystroke="ctrl shift alt U"/>
+            </action>
+
             <add-to-group group-id="EditorPopupMenu" anchor="first"/>
             <add-to-group group-id="ProjectViewPopupMenu" anchor="first"/>
         </group>
