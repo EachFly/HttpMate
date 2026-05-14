@@ -1,5 +1,30 @@
 # HttpMate Changelog
 
+## [1.2.0] - 2026-05-14
+
+### Added / 新增
+
+- **Toggle Case / 命名风格切换**:
+  - Added "Toggle Case" action to switch between camelCase, snake_case, SCREAMING_SNAKE_CASE, PascalCase, and kebab-case via popup menu.
+  - 新增「Toggle Case」功能，支持通过弹出菜单在 camelCase、snake_case、SCREAMING_SNAKE_CASE、PascalCase 和 kebab-case 之间快速切换。
+  - Default shortcut: `Ctrl + Shift + Alt + U`. Select text and trigger to see all available conversions.
+  - 默认快捷键：`Ctrl + Shift + Alt + U`，选中文本后触发即可查看所有可用转换。
+  - Includes intelligent word splitting with acronym awareness (e.g., `XMLParser` → `xml`, `parser`).
+  - 包含智能分词能力，可正确处理缩写词（如 `XMLParser` → `xml`、`parser`）。
+
+### Fixed / 修复
+
+- **Code Quality / 代码质量**:
+  - Resolved Qodana code inspection warnings across multiple files: removed unused property modifiers, redundant nullable return types, redundant qualifier names, and unnecessary explicit type arguments.
+  - 修复了多个文件中的 Qodana 代码检查告警：移除了未使用的属性修饰符、冗余的可空返回类型、冗余的限定符名称和不必要的显式类型参数。
+
+### Dependencies / 依赖升级
+
+- Upgraded `org.jetbrains.intellij.platform` from 2.14.0 to 2.16.0
+- Upgraded `org.jetbrains.qodana` from 2025.3.2 to 2026.1.0
+- Upgraded `JetBrains/qodana-action` from 2025.3.2 to 2026.1.0
+- Upgraded Gradle Wrapper from 9.4.1 to 9.5.1
+
 ## [1.1.3] - 2026-04-24
 
 ### Fixed / 修复
