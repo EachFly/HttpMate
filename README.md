@@ -10,11 +10,13 @@
 ## 📝 项目简介 (Project Overview)
 
 **HttpMate** 是一个 IntelliJ IDEA 插件，用于在 Java/Kotlin 项目中提升 REST API 开发效率。  
-它聚焦三个高频场景：
+它提供以下高频开发辅助功能：
 
 - 快速检索并跳转 REST 接口定义（类似 IDE 内搜索即跳转体验）
 - 基于类结构一键生成 JSON / Mock JSON
 - 基于控制器方法自动生成 Markdown 接口文档
+- 代码行统计：右键目录递归分析代码行、注释行、空行占比，含可视化图表
+- 命名风格切换：选中文本一键在 camelCase / snake_case / PascalCase / SCREAMING_SNAKE / kebab-case 间转换
 
 插件当前通过 PSI + 注解扫描实现对 **Spring Web** 与 **JAX-RS（javax / jakarta）** 的接口识别，并在 IDE 内完成交互与导航。
 
@@ -32,20 +34,27 @@
    - 基于字段类型生成随机示例数据，便于接口联调与文档示例编写
 5. **Markdown API 文档生成**
    - 支持按方法或按类批量生成文档，包含接口信息、参数表、响应字段与请求/响应示例
+6. **代码行统计**
+   - 右键任意目录或 Package 递归分析所有源文件的代码行、注释行、空行数及百分比
+   - 支持 25+ 种文件后缀，结果含汇总面板、彩色条形图和可排序明细表
+7. **命名风格切换**
+   - 快捷键：`Ctrl + Shift + Alt + U`
+   - 支持 camelCase、snake_case、SCREAMING_SNAKE_CASE、PascalCase、kebab-case 互转
+   - 智能分词，可正确处理缩写词（如 `XMLParser` → `xml`, `parser`）
 <!-- Plugin description end -->
 
 ## 🛠️ 技术栈 (Tech Stack)
 
 | 类别 | 技术/库 | 版本 |
 | --- | --- | --- |
-| 语言 | Kotlin (JVM) | `2.3.20` |
+| 语言 | Kotlin (JVM) | `2.3.21` |
 | 运行时 | Java Toolchain | `21` |
-| 构建工具 | Gradle Wrapper | `9.0.0` |
-| IntelliJ 插件构建 | `org.jetbrains.intellij.platform` | `2.13.1` |
+| 构建工具 | Gradle Wrapper | `9.5.1` |
+| IntelliJ 插件构建 | `org.jetbrains.intellij.platform` | `2.16.0` |
 | 目标 IDE 平台 | IntelliJ IDEA Community (`IC`) | `2024.3.6` |
 | 测试 | JUnit | `4.13.2` |
-| 覆盖率 | Kover | `0.9.7` |
-| 代码检查 | Qodana Gradle Plugin | `2025.3.2` |
+| 覆盖率 | Kover | `0.9.8` |
+| 代码检查 | Qodana Gradle Plugin | `2026.1.0` |
 
 > 兼容基线由插件配置控制：`sinceBuild = 243`（IntelliJ 2024.3+）。
 
@@ -103,7 +112,7 @@ build/distributions/
 
 ```properties
 pluginName = HttpMate
-pluginVersion = 1.0.0
+pluginVersion = 1.2.0
 platformType = IC
 platformVersion = 2024.3.6
 pluginSinceBuild = 243
@@ -155,6 +164,28 @@ http-mate/docs/UserController_getUser.md
 http-mate/docs/UserController.md
 ```
 
+### 4) 代码行统计
+
+在项目视图中右键某个目录或 Package：
+
+- `HttpMate -> Code Line Statistics`
+
+弹出的统计窗口包含：
+- 汇总面板（总行数、代码行、注释行、空行）
+- 彩色比例条形图
+- 按文件后缀分组的可排序明细表
+- 按文件维度的详情表
+
+### 5) 命名风格切换
+
+选中编辑器中的文本，按 `Ctrl + Shift + Alt + U`（或右键 `HttpMate -> Toggle Case`），在弹出菜单中选择目标风格：
+
+- `camelCase`
+- `snake_case`
+- `SCREAMING_SNAKE_CASE`
+- `PascalCase`
+- `kebab-case`
+
 ## 📂 项目结构 (Project Structure)
 
 ```text
@@ -162,7 +193,8 @@ HttpMate/
 ├─ src/
 │  ├─ main/
 │  │  ├─ kotlin/com/github/jeraxxxxxxx/httpmate/
-│  │  │  ├─ actions/      # 插件动作入口（搜索、JSON生成、文档生成）
+│  │  │  ├─ HttpMateBundle.kt  # 国际化资源绑定
+│  │  │  ├─ actions/      # 插件动作入口（搜索、JSON生成、文档生成、代码统计、命名切换）
 │  │  │  ├─ services/     # 接口扫描与项目级服务
 │  │  │  ├─ doc/          # Markdown 文档生成
 │  │  │  ├─ generator/    # JSON / Mock JSON 生成器
@@ -171,9 +203,11 @@ HttpMate/
 │  │  │  └─ constants/    # 注解与通用常量
 │  │  └─ resources/
 │  │     ├─ META-INF/plugin.xml      # 插件声明与动作注册
+│  │     ├─ icons/                    # SVG 图标资源
 │  │     └─ messages/MyBundle.properties
 │  └─ test/
-│     └─ kotlin/.../MyPluginTest.kt  # 核心行为测试
+│     ├─ kotlin/com/.../             # 单元测试
+│     └─ testData/                   # 测试数据文件
 ├─ build.gradle.kts
 ├─ gradle.properties
 └─ CHANGELOG.md
@@ -188,4 +222,4 @@ HttpMate/
 3. 本地运行 `./gradlew check` 与 `./gradlew verifyPlugin`
 4. 提交 PR 并说明变更动机与影响范围
 
-许可证（License）：**待补充**（仓库根目录当前未找到 `LICENSE` 文件）。
+许可证（License）：本项目基于 [MIT License](LICENSE) 开源。

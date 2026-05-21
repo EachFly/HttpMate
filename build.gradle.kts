@@ -43,14 +43,16 @@ intellijPlatform {
         version = providers.gradleProperty("pluginVersion")
 
         description = """
-            <p><strong>HttpMate</strong> is a powerful IntelliJ IDEA plugin designed to help developers quickly search and navigate to REST APIs within their projects. It supports Spring Boot and JAX-RS frameworks, offering a seamless experience similar to "Search Everywhere".</p>
+            <p><strong>HttpMate</strong> is a powerful IntelliJ IDEA plugin designed to boost REST API development productivity in Java/Kotlin projects. It supports Spring Boot and JAX-RS frameworks, offering a seamless experience similar to "Search Everywhere".</p>
             <br/>
             <h2>Features</h2>
             <ul>
-                <li><strong>REST API Search</strong>: <code>Ctrl + \</code> (or <code>Ctrl + Alt + H</code>) to search Spring Boot &amp; JAX-RS APIs.</li>
-                <li><strong>JSON Generation</strong>: Right-click on a class to generate JSON data.</li>
-                <li><strong>API Documentation</strong>: Right-click on a method to generate Markdown docs.</li>
-                <li><strong>Smart Navigation</strong>: Press <code>Enter</code> to jump to the declaration.</li>
+                <li><strong>REST API Search</strong>: <code>Ctrl + \</code> (or <code>Ctrl + Alt + H</code>) to search Spring Boot &amp; JAX-RS APIs with fuzzy subsequence matching.</li>
+                <li><strong>JSON Generation</strong>: Right-click on a class to generate structured JSON or Mock JSON with random test data.</li>
+                <li><strong>API Documentation</strong>: Right-click on a controller method or class to generate Markdown API docs.</li>
+                <li><strong>Code Line Statistics</strong>: Right-click directories to analyze code, comment, and blank line counts with visual charts.</li>
+                <li><strong>Toggle Case</strong>: <code>Ctrl + Shift + Alt + U</code> to switch between camelCase, snake_case, PascalCase, SCREAMING_SNAKE_CASE, and kebab-case.</li>
+                <li><strong>Smart Navigation</strong>: Press <code>Enter</code> to jump directly to the API declaration.</li>
             </ul>
             <br/>
             <p><strong>Source Code</strong>: <a href="https://github.com/EachFly/HttpMate">https://github.com/EachFly/HttpMate</a></p>
