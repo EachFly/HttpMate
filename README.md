@@ -47,14 +47,14 @@
 
 | 类别 | 技术/库 | 版本 |
 | --- | --- | --- |
-| 语言 | Kotlin (JVM) | `2.3.21` |
+| 语言 | Kotlin (JVM) | `2.4.0` |
 | 运行时 | Java Toolchain | `21` |
-| 构建工具 | Gradle Wrapper | `9.5.1` |
+| 构建工具 | Gradle Wrapper | `9.6.0` |
 | IntelliJ 插件构建 | `org.jetbrains.intellij.platform` | `2.16.0` |
 | 目标 IDE 平台 | IntelliJ IDEA Community (`IC`) | `2024.3.6` |
 | 测试 | JUnit | `4.13.2` |
 | 覆盖率 | Kover | `0.9.8` |
-| 代码检查 | Qodana Gradle Plugin | `2026.1.0` |
+| 代码检查 | Qodana Gradle Plugin | `2026.1.3` |
 
 > 兼容基线由插件配置控制：`sinceBuild = 243`（IntelliJ 2024.3+）。
 
@@ -112,7 +112,7 @@ build/distributions/
 
 ```properties
 pluginName = HttpMate
-pluginVersion = 1.2.0
+pluginVersion = 1.2.1
 platformType = IC
 platformVersion = 2024.3.6
 pluginSinceBuild = 243

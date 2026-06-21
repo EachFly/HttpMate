@@ -1,5 +1,16 @@
 # HttpMate Changelog
 
+## [1.2.1] - 2026-06-21
+
+### Dependencies / 依赖升级
+
+- Upgraded `org.jetbrains.kotlin.jvm` from 2.3.21 to 2.4.0
+- Upgraded `org.jetbrains.qodana` from 2026.1.0 to 2026.1.3
+- Upgraded `JetBrains/qodana-action` from 2026.1.0 to 2026.1.3
+- Upgraded `codecov/codecov-action` from 6 to 7
+- Upgraded `actions/checkout` from 6 to 7
+- Upgraded Gradle Wrapper from 9.5.1 to 9.6.0
+
 ## [1.2.0] - 2026-05-14
 
 ### Added / 新增
