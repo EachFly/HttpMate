@@ -222,6 +222,23 @@ jobs:
       - name: Fetch Sources
         uses: actions/checkout@v7
 
+      # Set up the Java environment for the next steps
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: zulu
+          java-version: 21
+
+      # Setup Gradle
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: true
+
+      # Build plugin to get the distributable zip
+      - name: Build Plugin
+        run: ./gradlew buildPlugin
+
       # Remove old release drafts by using the curl request for the available releases with a draft flag
       - name: Remove Old Release Drafts
         env:
@@ -243,4 +260,6 @@ jobs:
           gh release create $VERSION \
             --draft \
             --title $VERSION \
-            --notes-file $RELEASE_NOTE
+            --notes-file $RELEASE_NOTE \
+            ./build/distributions/*.zip
+
