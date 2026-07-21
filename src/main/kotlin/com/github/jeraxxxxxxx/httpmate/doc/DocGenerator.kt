@@ -2,9 +2,14 @@ package com.github.jeraxxxxxxx.httpmate.doc
 
 import com.github.jeraxxxxxxx.httpmate.constants.AppConstants
 import com.github.jeraxxxxxxx.httpmate.generator.MockJsonGenerator
+import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.PsiAnnotation
+import com.intellij.psi.PsiAnnotationMemberValue
+import com.intellij.psi.PsiArrayInitializerMemberValue
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiComment
+import com.intellij.psi.PsiLiteralExpression
+import com.intellij.psi.PsiReferenceExpression
 import com.intellij.psi.PsiField
 import com.intellij.psi.PsiMethod
 import com.intellij.psi.PsiModifier
@@ -148,88 +153,120 @@ class DocGenerator {
     }
 
     private fun getApiInfo(method: PsiMethod): Pair<String, String> {
-        var httpMethod = "GET"
-        var path = buildString {
-            appendClassLevelPath(method.containingClass, "org.springframework.web.bind.annotation.RequestMapping")
-            appendClassLevelPath(method.containingClass, "javax.ws.rs.Path")
-            appendClassLevelPath(method.containingClass, "jakarta.ws.rs.Path")
-        }
+        val classPaths = extractClassPaths(method.containingClass)
+        var methodPaths = listOf("")
+        val httpMethods = linkedSetOf<String>()
 
         for (annotation in method.annotations) {
             val name = annotation.qualifiedName ?: continue
 
             if (name.startsWith("org.springframework.web.bind.annotation")) {
-                when {
-                    name.endsWith("GetMapping") -> {
-                        httpMethod = "GET"; path += getPathValue(annotation); break
-                    }
+                val fixedMethod = when {
+                    name.endsWith("GetMapping") -> "GET"
+                    name.endsWith("PostMapping") -> "POST"
+                    name.endsWith("PutMapping") -> "PUT"
+                    name.endsWith("DeleteMapping") -> "DELETE"
+                    name.endsWith("PatchMapping") -> "PATCH"
+                    else -> null
+                }
 
-                    name.endsWith("PostMapping") -> {
-                        httpMethod = "POST"; path += getPathValue(annotation); break
-                    }
+                if (fixedMethod != null) {
+                    httpMethods += fixedMethod
+                    methodPaths = extractPaths(annotation)
+                    break
+                }
 
-                    name.endsWith("PutMapping") -> {
-                        httpMethod = "PUT"; path += getPathValue(annotation); break
-                    }
-
-                    name.endsWith("DeleteMapping") -> {
-                        httpMethod = "DELETE"; path += getPathValue(annotation); break
-                    }
-
-                    name.endsWith("PatchMapping") -> {
-                        httpMethod = "PATCH"; path += getPathValue(annotation); break
-                    }
-
-                    name.endsWith("RequestMapping") -> {
-                        httpMethod = getRequestMethod(annotation); path += getPathValue(annotation); break
-                    }
+                if (name.endsWith("RequestMapping")) {
+                    httpMethods += extractRequestMethods(annotation)
+                    methodPaths = extractPaths(annotation)
+                    break
                 }
             }
 
             if (name.startsWith("javax.ws.rs") || name.startsWith("jakarta.ws.rs")) {
                 when {
-                    name.endsWith(".GET") -> httpMethod = "GET"
-                    name.endsWith(".POST") -> httpMethod = "POST"
-                    name.endsWith(".PUT") -> httpMethod = "PUT"
-                    name.endsWith(".DELETE") -> httpMethod = "DELETE"
-                    name.endsWith(".PATCH") -> httpMethod = "PATCH"
-                    name.endsWith(".HEAD") -> httpMethod = "HEAD"
-                    name.endsWith(".OPTIONS") -> httpMethod = "OPTIONS"
-                }
-                if (name.endsWith(".Path")) {
-                    path += getJaxRsPath(annotation)
+                    name.endsWith(".GET") -> httpMethods += "GET"
+                    name.endsWith(".POST") -> httpMethods += "POST"
+                    name.endsWith(".PUT") -> httpMethods += "PUT"
+                    name.endsWith(".DELETE") -> httpMethods += "DELETE"
+                    name.endsWith(".PATCH") -> httpMethods += "PATCH"
+                    name.endsWith(".HEAD") -> httpMethods += "HEAD"
+                    name.endsWith(".OPTIONS") -> httpMethods += "OPTIONS"
+                    name.endsWith(".Path") -> methodPaths = extractPaths(annotation)
                 }
             }
         }
 
-        val normalizedPath = path.replace("//", "/").let { if (it.startsWith("/")) it else "/$it" }
-        return httpMethod to normalizedPath
-    }
-
-    private fun StringBuilder.appendClassLevelPath(psiClass: PsiClass?, annotationName: String) {
-        val annotation = psiClass?.getAnnotation(annotationName) ?: return
-        append(annotation.findAttributeValue("value")?.text?.replace("\"", "") ?: "")
-    }
-
-    private fun getPathValue(annotation: PsiAnnotation): String {
-        return annotation.findAttributeValue("value")?.text?.replace("\"", "")
-            ?: annotation.findAttributeValue("path")?.text?.replace("\"", "")
-            ?: ""
-    }
-
-    private fun getJaxRsPath(annotation: PsiAnnotation): String {
-        return annotation.findAttributeValue("value")?.text?.replace("\"", "") ?: ""
-    }
-
-    private fun getRequestMethod(annotation: PsiAnnotation): String {
-        val methodValue = annotation.findAttributeValue("method")?.text ?: return "GET"
-        return when {
-            "POST" in methodValue -> "POST"
-            "PUT" in methodValue -> "PUT"
-            "DELETE" in methodValue -> "DELETE"
-            "PATCH" in methodValue -> "PATCH"
-            else -> "GET"
+        if (httpMethods.isEmpty()) {
+            httpMethods += "ALL"
         }
+
+        val fullPaths = classPaths.flatMap { classPath ->
+            methodPaths.map { methodPath -> combinePaths(classPath, methodPath) }
+        }.distinct()
+
+        return httpMethods.joinToString(", ") to fullPaths.joinToString(", ")
+    }
+
+    internal fun extractClassPaths(psiClass: PsiClass?): List<String> {
+        if (psiClass == null) return listOf("")
+
+        val annotationNames = listOf(
+            "org.springframework.web.bind.annotation.RequestMapping",
+            "javax.ws.rs.Path",
+            "jakarta.ws.rs.Path"
+        )
+        for (annotationName in annotationNames) {
+            psiClass.getAnnotation(annotationName)?.let { return extractPaths(it) }
+        }
+        return listOf("")
+    }
+
+    private fun extractPaths(annotation: PsiAnnotation): List<String> {
+        val value = annotation.findDeclaredAttributeValue("value")
+            ?: annotation.findDeclaredAttributeValue("path")
+            ?: annotation.findAttributeValue("value")
+            ?: annotation.findAttributeValue("path")
+            ?: return listOf("")
+
+        return flattenAnnotationValues(value)
+            .mapNotNull { evaluateString(annotation, it) }
+            .distinct()
+            .ifEmpty { listOf("") }
+    }
+
+    private fun extractRequestMethods(annotation: PsiAnnotation): List<String> {
+        val value = annotation.findDeclaredAttributeValue("method") ?: return listOf("ALL")
+        return flattenAnnotationValues(value)
+            .mapNotNull { member ->
+                member.text.substringAfterLast('.').trim().takeIf(String::isNotEmpty)
+            }
+            .distinct()
+            .ifEmpty { listOf("ALL") }
+    }
+
+    private fun flattenAnnotationValues(value: PsiAnnotationMemberValue): List<PsiAnnotationMemberValue> {
+        return if (value is PsiArrayInitializerMemberValue) value.initializers.toList() else listOf(value)
+    }
+
+    private fun evaluateString(annotation: PsiAnnotation, value: PsiAnnotationMemberValue): String? {
+        val helper = JavaPsiFacade.getInstance(annotation.project).constantEvaluationHelper
+        val computed = helper.computeConstantExpression(value)
+        if (computed is String) return computed
+
+        val initializer = (value as? PsiReferenceExpression)
+            ?.resolve()
+            ?.let { it as? PsiField }
+            ?.initializer
+        val referencedValue = initializer?.let { helper.computeConstantExpression(it) }
+        return referencedValue as? String ?: (value as? PsiLiteralExpression)?.value as? String
+    }
+
+    private fun combinePaths(classPath: String, methodPath: String): String {
+        val segments = listOf(classPath, methodPath)
+            .map { it.trim().trim('/') }
+            .filter { it.isNotEmpty() }
+        return if (segments.isEmpty()) "/" else "/" + segments.joinToString("/")
     }
 
     private fun isRequired(param: PsiParameter): String {

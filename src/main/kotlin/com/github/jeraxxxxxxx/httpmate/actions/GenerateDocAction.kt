@@ -8,6 +8,7 @@ import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
@@ -72,9 +73,7 @@ class GenerateDocAction : AnAction() {
                     val result =
                         ApplicationManager.getApplication().runReadAction(Computable<Triple<String, String, String>?> {
                             val psiMethod = psiMethodPointer.element ?: return@Computable null
-                            val className = psiMethod.containingClass?.name ?: "Unknown"
-                            val methodName = psiMethod.name
-                            val fileName = "${className}_${methodName}"
+                            val fileName = GeneratedFileNames.forMethod(psiMethod)
                             Triple(
                                 fileName,
                                 "${
@@ -93,6 +92,8 @@ class GenerateDocAction : AnAction() {
                             HttpMateBundle.message("dialog.success.title")
                         )
                     }
+                } catch (e: ProcessCanceledException) {
+                    throw e
                 } catch (e: Exception) {
                     showGenerationError(project, e)
                 }
@@ -110,11 +111,16 @@ class GenerateDocAction : AnAction() {
 
                 try {
                     val result =
-                        ApplicationManager.getApplication().runReadAction(Computable<Triple<String, Int, String>?> {
+                        ApplicationManager.getApplication().runReadAction(Computable<GeneratedClassDoc?> {
                             val psiClass = psiClassPointer.element ?: return@Computable null
                             val className = psiClass.name ?: "Unknown"
                             val built = buildClassDoc(psiClass) ?: return@Computable null
-                            Triple(built.first, built.second, className)
+                            GeneratedClassDoc(
+                                content = built.first,
+                                methodCount = built.second,
+                                className = className,
+                                fileStem = GeneratedFileNames.forClass(psiClass)
+                            )
                         }) ?: run {
                             ApplicationManager.getApplication().invokeLater {
                                 Messages.showInfoMessage(
@@ -126,23 +132,24 @@ class GenerateDocAction : AnAction() {
                             return
                         }
 
-                    val className = result.third
                     val service = project.getService(HttpMateProjectService::class.java)
-                    val targetFile = File(service.getDocOutputPath(), "$className.md")
+                    val targetFile = File(service.getDocOutputPath(), "${result.fileStem}.md")
 
-                    saveDocToFileAsync(project, className, result.first) {
-                        service.recordGeneration("$className.md")
+                    saveDocToFileAsync(project, result.fileStem, result.content) {
+                        service.recordGeneration("${result.fileStem}.md")
                         Messages.showInfoMessage(
                             project,
                             HttpMateBundle.message(
                                 "doc.generate.class.success",
-                                result.second,
-                                className,
+                                result.methodCount,
+                                result.className,
                                 targetFile.absolutePath
                             ),
                             HttpMateBundle.message("dialog.success.title")
                         )
                     }
+                } catch (e: ProcessCanceledException) {
+                    throw e
                 } catch (e: Exception) {
                     showGenerationError(project, e)
                 }
@@ -163,9 +170,9 @@ class GenerateDocAction : AnAction() {
         val content = buildString {
             append("# $className 接口文档\n\n")
 
-            val classMapping = psiClass.getAnnotation("org.springframework.web.bind.annotation.RequestMapping")
-            if (classMapping != null) {
-                val basePath = classMapping.findAttributeValue("value")?.text?.replace("\"", "") ?: ""
+            val basePaths = docGenerator.extractClassPaths(psiClass).filter(String::isNotEmpty)
+            if (basePaths.isNotEmpty()) {
+                val basePath = basePaths.joinToString(", ")
                 append("**基础路径**: `$basePath`\n\n")
             }
 
@@ -240,4 +247,11 @@ class GenerateDocAction : AnAction() {
             )
         }
     }
+
+    private data class GeneratedClassDoc(
+        val content: String,
+        val methodCount: Int,
+        val className: String,
+        val fileStem: String
+    )
 }

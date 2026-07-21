@@ -6,6 +6,7 @@ import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
@@ -42,13 +43,15 @@ abstract class BaseGenerateJsonAction : AnAction() {
                         val result =
                             ApplicationManager.getApplication().runReadAction(Computable<Pair<String, String>?> {
                                 val targetClass = classPointer.element ?: return@Computable null
-                                val className = targetClass.name ?: "Unknown"
+                                val fileStem = GeneratedFileNames.forClass(targetClass)
                                 val generator = getGenerator()
-                                className to generator.generate(
+                                fileStem to generator.generate(
                                     JavaPsiFacade.getElementFactory(project).createType(targetClass), 0
                                 )
                             }) ?: return
                         saveJsonToFile(project, result.first, result.second)
+                    } catch (ex: ProcessCanceledException) {
+                        throw ex
                     } catch (ex: Exception) {
                         ApplicationManager.getApplication().invokeLater {
                             Messages.showErrorDialog(
@@ -68,11 +71,11 @@ abstract class BaseGenerateJsonAction : AnAction() {
         e.presentation.isEnabledAndVisible = psiClass != null
     }
 
-    private fun saveJsonToFile(project: Project, className: String, jsonContent: String) {
+    private fun saveJsonToFile(project: Project, fileStem: String, jsonContent: String) {
         val projectBasePath = project.basePath ?: return
         val targetDir = File(projectBasePath, "http-mate")
 
-        val targetFile = File(targetDir, "$className.json")
+        val targetFile = File(targetDir, "$fileStem.json")
 
         try {
             if (!targetDir.exists() && !targetDir.mkdirs()) {

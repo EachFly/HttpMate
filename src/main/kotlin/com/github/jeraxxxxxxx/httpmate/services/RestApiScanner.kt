@@ -4,12 +4,17 @@ import com.github.jeraxxxxxxx.httpmate.constants.RestAnnotations
 import com.github.jeraxxxxxxx.httpmate.model.RestApiItem
 import com.github.jeraxxxxxxx.httpmate.ui.RestApiIcons
 import com.intellij.openapi.diagnostic.thisLogger
+import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.project.Project
 import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.PsiAnnotation
+import com.intellij.psi.PsiAnnotationMemberValue
+import com.intellij.psi.PsiArrayInitializerMemberValue
 import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiLiteralExpression
 import com.intellij.psi.PsiMethod
+import com.intellij.psi.PsiReferenceExpression
 import com.intellij.psi.SmartPointerManager
 import com.intellij.psi.SmartPsiElementPointer
 import com.intellij.psi.search.GlobalSearchScope
@@ -53,6 +58,8 @@ class RestApiScanner(private val project: Project) {
                     pointers.add(SmartPointerManager.createPointer(method))
                     true
                 })
+            } catch (e: ProcessCanceledException) {
+                throw e
             } catch (e: Exception) {
                 thisLogger().warn("Error scanning for annotation: $annotationName", e)
             }
@@ -68,73 +75,94 @@ class RestApiScanner(private val project: Project) {
             val method = candidate.element ?: continue
             val annotationData = findRestAnnotation(method) ?: continue
             val (annotationName, annotation) = annotationData
-            val methodPath = extractPath(method, annotation)
-            val classPath = extractClassPath(method.containingClass)
-            val fullPath = combinePaths(classPath, methodPath)
-            val httpMethod = extractMethod(method, annotationName, annotation)
             val navigationElement = method.navigationElement.takeIf(PsiElement::isValid) ?: method
             val pointer = SmartPointerManager.createPointer(navigationElement)
 
-            items.add(
-                RestApiItem(
-                    method = httpMethod,
-                    path = fullPath,
-                    fileName = navigationElement.containingFile?.name ?: method.containingFile?.name ?: "",
-                    navigationOffset = navigationElement.textOffset,
-                    elementPointer = pointer,
-                    icon = RestApiIcons.getIcon(httpMethod)
-                )
-            )
+            val classPaths = extractClassPaths(method.containingClass)
+            val methodPaths = extractPaths(method, annotation)
+            val httpMethods = extractMethods(method, annotationName, annotation)
+
+            for (classPath in classPaths) {
+                for (methodPath in methodPaths) {
+                    val fullPath = combinePaths(classPath, methodPath)
+                    for (httpMethod in httpMethods) {
+                        items.add(
+                            RestApiItem(
+                                method = httpMethod,
+                                path = fullPath,
+                                fileName = navigationElement.containingFile?.name
+                                    ?: method.containingFile?.name
+                                    ?: "",
+                                navigationOffset = navigationElement.textOffset,
+                                elementPointer = pointer,
+                                icon = RestApiIcons.getIcon(httpMethod)
+                            )
+                        )
+                    }
+                }
+            }
         }
 
-        return items
+        return items.distinctBy { Triple(it.method, it.path, it.navigationOffset) }
     }
 
-    private fun extractClassPath(psiClass: com.intellij.psi.PsiClass?): String {
-        if (psiClass == null) return ""
+    private fun extractClassPaths(psiClass: com.intellij.psi.PsiClass?): List<String> {
+        if (psiClass == null) return listOf("")
 
         for (annotationName in RestAnnotations.CLASS_PATH_ANNOTATIONS) {
             val annotation = psiClass.getAnnotation(annotationName)
             if (annotation != null) {
-                return extractPathFromAnnotation(annotation)
+                return extractPathsFromAnnotation(annotation)
             }
         }
-        return ""
+        return listOf("")
     }
 
     private fun combinePaths(classPath: String, methodPath: String): String {
-        val p1 = if (classPath.startsWith("/")) classPath else "/$classPath"
-        val p2 = if (methodPath.startsWith("/")) methodPath else "/$methodPath"
-
-        if (p1 == "/" && p2 == "/") return "/"
-        if (p1 == "/") return p2
-        if (p2 == "/") return p1
-
-        return p1 + p2
+        val segments = listOf(classPath, methodPath)
+            .map { it.trim().trim('/') }
+            .filter { it.isNotEmpty() }
+        return if (segments.isEmpty()) "/" else "/" + segments.joinToString("/")
     }
 
-    private fun extractPath(method: PsiMethod, annotation: PsiAnnotation): String {
-        // If it's a JAX-RS verb (GET, POST, etc.), it doesn't have a path. 
-        // We need to look for @Path on the method.
+    private fun extractPaths(method: PsiMethod, annotation: PsiAnnotation): List<String> {
         val qName = annotation.qualifiedName ?: ""
         if (isJaxRsVerb(qName)) {
             val pathAnnotation = method.getAnnotation("javax.ws.rs.Path")
                 ?: method.getAnnotation("jakarta.ws.rs.Path")
-            return if (pathAnnotation != null) extractPathFromAnnotation(pathAnnotation) else ""
+            return if (pathAnnotation != null) extractPathsFromAnnotation(pathAnnotation) else listOf("")
         }
-        return extractPathFromAnnotation(annotation)
+        return extractPathsFromAnnotation(annotation)
     }
 
-    private fun extractPathFromAnnotation(annotation: PsiAnnotation): String {
-        // Try to find 'value' or 'path' attribute
-        val valueAttr = annotation.findAttributeValue("value") ?: annotation.findAttributeValue("path")
-        var path = valueAttr?.text?.replace("\"", "") ?: ""
+    private fun extractPathsFromAnnotation(annotation: PsiAnnotation): List<String> {
+        val value = annotation.findDeclaredAttributeValue("value")
+            ?: annotation.findDeclaredAttributeValue("path")
+            ?: annotation.findAttributeValue("value")
+            ?: annotation.findAttributeValue("path")
+            ?: return listOf("")
 
-        // Handle array syntax like {"/api"} -> /api
-        if (path.startsWith("{") && path.endsWith("}")) {
-            path = path.substring(1, path.length - 1).trim()
-        }
-        return path
+        return flattenAnnotationValues(value)
+            .mapNotNull(::evaluateString)
+            .distinct()
+            .ifEmpty { listOf("") }
+    }
+
+    private fun flattenAnnotationValues(value: PsiAnnotationMemberValue): List<PsiAnnotationMemberValue> {
+        return if (value is PsiArrayInitializerMemberValue) value.initializers.toList() else listOf(value)
+    }
+
+    private fun evaluateString(value: PsiAnnotationMemberValue): String? {
+        val helper = JavaPsiFacade.getInstance(project).constantEvaluationHelper
+        val computed = helper.computeConstantExpression(value)
+        if (computed is String) return computed
+
+        val initializer = (value as? PsiReferenceExpression)
+            ?.resolve()
+            ?.let { it as? com.intellij.psi.PsiField }
+            ?.initializer
+        val referencedValue = initializer?.let { helper.computeConstantExpression(it) }
+        return referencedValue as? String ?: (value as? PsiLiteralExpression)?.value as? String
     }
 
     private fun isJaxRsVerb(qName: String): Boolean {
@@ -144,49 +172,44 @@ class RestApiScanner(private val project: Project) {
                 qName.endsWith(".OPTIONS")
     }
 
-    private fun extractMethod(
+    private fun extractMethods(
         method: PsiMethod,
         annotationName: String,
         annotation: PsiAnnotation
-    ): String {
+    ): List<String> {
         return when (annotationName) {
-            "org.springframework.web.bind.annotation.GetMapping" -> "GET"
-            "org.springframework.web.bind.annotation.PostMapping" -> "POST"
-            "org.springframework.web.bind.annotation.PutMapping" -> "PUT"
-            "org.springframework.web.bind.annotation.DeleteMapping" -> "DELETE"
-            "org.springframework.web.bind.annotation.PatchMapping" -> "PATCH"
+            "org.springframework.web.bind.annotation.GetMapping" -> listOf("GET")
+            "org.springframework.web.bind.annotation.PostMapping" -> listOf("POST")
+            "org.springframework.web.bind.annotation.PutMapping" -> listOf("PUT")
+            "org.springframework.web.bind.annotation.DeleteMapping" -> listOf("DELETE")
+            "org.springframework.web.bind.annotation.PatchMapping" -> listOf("PATCH")
             "org.springframework.web.bind.annotation.RequestMapping" -> {
-                val methodAttr = annotation.findAttributeValue("method")
-                val text = methodAttr?.text?.replace("{", "")?.replace("}", "")?.trim() ?: ""
-                if (text.contains("RequestMethod.")) {
-                    text.substringAfterLast("RequestMethod.").substringBefore(",")
-                } else if (text.isNotEmpty()) {
-                    text.substringAfterLast(".").substringBefore(",")
-                } else {
-                    "ALL"
-                }
+                val methodAttr = annotation.findDeclaredAttributeValue("method")
+                    ?: return listOf("ALL")
+                flattenAnnotationValues(methodAttr)
+                    .mapNotNull { value ->
+                        value.text.substringAfterLast('.').trim().takeIf(String::isNotEmpty)
+                    }
+                    .distinct()
+                    .ifEmpty { listOf("ALL") }
             }
 
-            "javax.ws.rs.GET", "jakarta.ws.rs.GET" -> "GET"
-            "javax.ws.rs.POST", "jakarta.ws.rs.POST" -> "POST"
-            "javax.ws.rs.PUT", "jakarta.ws.rs.PUT" -> "PUT"
-            "javax.ws.rs.DELETE", "jakarta.ws.rs.DELETE" -> "DELETE"
-            "javax.ws.rs.PATCH", "jakarta.ws.rs.PATCH" -> "PATCH"
-            "javax.ws.rs.HEAD", "jakarta.ws.rs.HEAD" -> "HEAD"
-            "javax.ws.rs.OPTIONS", "jakarta.ws.rs.OPTIONS" -> "OPTIONS"
+            "javax.ws.rs.GET", "jakarta.ws.rs.GET" -> listOf("GET")
+            "javax.ws.rs.POST", "jakarta.ws.rs.POST" -> listOf("POST")
+            "javax.ws.rs.PUT", "jakarta.ws.rs.PUT" -> listOf("PUT")
+            "javax.ws.rs.DELETE", "jakarta.ws.rs.DELETE" -> listOf("DELETE")
+            "javax.ws.rs.PATCH", "jakarta.ws.rs.PATCH" -> listOf("PATCH")
+            "javax.ws.rs.HEAD", "jakarta.ws.rs.HEAD" -> listOf("HEAD")
+            "javax.ws.rs.OPTIONS", "jakarta.ws.rs.OPTIONS" -> listOf("OPTIONS")
             "javax.ws.rs.Path", "jakarta.ws.rs.Path" -> {
-                // Check if the method has any verb annotation
-                if (method.hasAnnotation("javax.ws.rs.GET") || method.hasAnnotation("jakarta.ws.rs.GET")) return "GET"
-                if (method.hasAnnotation("javax.ws.rs.POST") || method.hasAnnotation("jakarta.ws.rs.POST")) return "POST"
-                if (method.hasAnnotation("javax.ws.rs.PUT") || method.hasAnnotation("jakarta.ws.rs.PUT")) return "PUT"
-                if (method.hasAnnotation("javax.ws.rs.DELETE") || method.hasAnnotation("jakarta.ws.rs.DELETE")) return "DELETE"
-                if (method.hasAnnotation("javax.ws.rs.PATCH") || method.hasAnnotation("jakarta.ws.rs.PATCH")) return "PATCH"
-                if (method.hasAnnotation("javax.ws.rs.HEAD") || method.hasAnnotation("jakarta.ws.rs.HEAD")) return "HEAD"
-                if (method.hasAnnotation("javax.ws.rs.OPTIONS") || method.hasAnnotation("jakarta.ws.rs.OPTIONS")) return "OPTIONS"
-                "ALL"
+                listOf("GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS")
+                    .filter { verb ->
+                        method.hasAnnotation("javax.ws.rs.$verb") || method.hasAnnotation("jakarta.ws.rs.$verb")
+                    }
+                    .ifEmpty { listOf("ALL") }
             }
 
-            else -> "UNKNOWN"
+            else -> listOf("UNKNOWN")
         }
     }
 
