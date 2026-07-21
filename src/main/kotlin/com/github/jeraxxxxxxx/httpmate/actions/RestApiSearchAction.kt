@@ -9,6 +9,7 @@ import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.diagnostic.thisLogger
+import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
@@ -81,6 +82,8 @@ class RestApiSearchAction : AnAction() {
 
                         thisLogger().info("Scanned ${result.size} items")
                         result
+                    } catch (ex: ProcessCanceledException) {
+                        throw ex
                     } catch (ex: Exception) {
                         thisLogger().error("Error during REST API scan", ex)
                         ApplicationManager.getApplication().invokeLater {

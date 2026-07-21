@@ -1,7 +1,9 @@
 package com.github.jeraxxxxxxx.httpmate
 
 import com.github.jeraxxxxxxx.httpmate.actions.ActionContextResolver
+import com.github.jeraxxxxxxx.httpmate.actions.GeneratedFileNames
 import com.github.jeraxxxxxxx.httpmate.doc.DocGenerator
+import com.github.jeraxxxxxxx.httpmate.generator.MockJsonGenerator
 import com.github.jeraxxxxxxx.httpmate.services.HttpMateProjectService
 import com.github.jeraxxxxxxx.httpmate.services.RestApiScanner
 import com.intellij.ide.highlighter.XmlFileType
@@ -10,9 +12,12 @@ import com.intellij.openapi.components.service
 import com.intellij.testFramework.TestDataPath
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import com.intellij.util.PsiErrorElementUtil
+import com.intellij.psi.PsiClassOwner
 import com.intellij.psi.PsiMethod
+import com.intellij.psi.PsiTypes
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.psi.xml.XmlFile
+import java.util.Locale
 
 @TestDataPath("\$CONTENT_ROOT/src/test/testData")
 class MyPluginTest : BasePlatformTestCase() {
@@ -103,6 +108,100 @@ class MyPluginTest : BasePlatformTestCase() {
             ),
             items
         )
+    }
+
+    fun testRestApiScannerExpandsMultiplePathsMethodsAndConstants() {
+        addRestAnnotationStubs()
+
+        val psiFile = myFixture.addFileToProject(
+            "src/com/example/MultiController.java",
+            """
+            package com.example;
+
+            import org.springframework.web.bind.annotation.RequestMapping;
+            import org.springframework.web.bind.annotation.RequestMethod;
+
+            final class Routes {
+              static final String API = "/constant";
+            }
+
+            @RequestMapping(path = {Routes.API, "/secondary"})
+            public class MultiController {
+              @RequestMapping(
+                  path = {"/items", "/things"},
+                  method = {RequestMethod.GET, RequestMethod.POST}
+              )
+              public String handle() {
+                return "ok";
+              }
+            }
+            """.trimIndent()
+        )
+
+        val result = ReadAction.compute<Pair<Set<Pair<String, String>>, String>, RuntimeException> {
+            val scanner = RestApiScanner(project)
+            val items = scanner.scanBatch(scanner.collectApiCandidates())
+                .map { it.method to it.path }
+                .toSet()
+            val method = PsiTreeUtil.findChildrenOfType(psiFile, PsiMethod::class.java)
+                .first { it.name == "handle" }
+            items to DocGenerator().generate(method)
+        }
+
+        val expected = setOf(
+            "GET" to "/constant/items",
+            "POST" to "/constant/items",
+            "GET" to "/constant/things",
+            "POST" to "/constant/things",
+            "GET" to "/secondary/items",
+            "POST" to "/secondary/items",
+            "GET" to "/secondary/things",
+            "POST" to "/secondary/things"
+        )
+        assertEquals(expected, result.first)
+        assertTrue(result.second.contains("GET, POST"))
+        expected.map { it.second }.distinct().forEach { path ->
+            assertTrue("Missing path $path", result.second.contains(path))
+        }
+    }
+
+    fun testGeneratedFileNamesAvoidClassAndOverloadCollisions() {
+        val firstFile = myFixture.addFileToProject(
+            "src/first/UserController.java",
+            "package first; public class UserController { public void load() {} public void load(String id) {} }"
+        )
+        val secondFile = myFixture.addFileToProject(
+            "src/second/UserController.java",
+            "package second; public class UserController { public void load() {} }"
+        )
+
+        val names = ReadAction.compute<List<String>, RuntimeException> {
+            val firstClass = (firstFile as PsiClassOwner).classes.single()
+            val secondClass = (secondFile as PsiClassOwner).classes.single()
+            val overloads = firstClass.findMethodsByName("load", false).sortedBy { it.parameterList.parametersCount }
+            listOf(
+                GeneratedFileNames.forClass(firstClass),
+                GeneratedFileNames.forClass(secondClass),
+                GeneratedFileNames.forMethod(overloads[0]),
+                GeneratedFileNames.forMethod(overloads[1])
+            )
+        }
+
+        assertEquals(names.size, names.toSet().size)
+    }
+
+    fun testMockJsonUsesLocaleIndependentDecimalSeparator() {
+        val previousLocale = Locale.getDefault(Locale.Category.FORMAT)
+        try {
+            Locale.setDefault(Locale.Category.FORMAT, Locale.GERMANY)
+            val value = ReadAction.compute<String, RuntimeException> {
+                MockJsonGenerator().generate(PsiTypes.doubleType(), 0)
+            }
+            assertTrue(value.matches(Regex("\\d+\\.\\d{2}")))
+            assertFalse(value.contains(','))
+        } finally {
+            Locale.setDefault(Locale.Category.FORMAT, previousLocale)
+        }
     }
 
     fun testDocGeneratorProducesReadableMarkdown() {
@@ -206,8 +305,8 @@ class MyPluginTest : BasePlatformTestCase() {
             """
             package org.springframework.web.bind.annotation;
             public @interface RequestMapping {
-              String value() default "";
-              String path() default "";
+              String[] value() default {};
+              String[] path() default {};
               RequestMethod[] method() default {};
             }
             """.trimIndent()
@@ -217,8 +316,8 @@ class MyPluginTest : BasePlatformTestCase() {
             """
             package org.springframework.web.bind.annotation;
             public @interface GetMapping {
-              String value() default "";
-              String path() default "";
+              String[] value() default {};
+              String[] path() default {};
             }
             """.trimIndent()
         )
@@ -227,8 +326,8 @@ class MyPluginTest : BasePlatformTestCase() {
             """
             package org.springframework.web.bind.annotation;
             public @interface PostMapping {
-              String value() default "";
-              String path() default "";
+              String[] value() default {};
+              String[] path() default {};
             }
             """.trimIndent()
         )
@@ -237,8 +336,8 @@ class MyPluginTest : BasePlatformTestCase() {
             """
             package org.springframework.web.bind.annotation;
             public @interface PutMapping {
-              String value() default "";
-              String path() default "";
+              String[] value() default {};
+              String[] path() default {};
             }
             """.trimIndent()
         )
@@ -247,8 +346,8 @@ class MyPluginTest : BasePlatformTestCase() {
             """
             package org.springframework.web.bind.annotation;
             public @interface DeleteMapping {
-              String value() default "";
-              String path() default "";
+              String[] value() default {};
+              String[] path() default {};
             }
             """.trimIndent()
         )
@@ -257,8 +356,8 @@ class MyPluginTest : BasePlatformTestCase() {
             """
             package org.springframework.web.bind.annotation;
             public @interface PatchMapping {
-              String value() default "";
-              String path() default "";
+              String[] value() default {};
+              String[] path() default {};
             }
             """.trimIndent()
         )

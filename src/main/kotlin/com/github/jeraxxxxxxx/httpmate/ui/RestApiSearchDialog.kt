@@ -19,6 +19,7 @@ import java.awt.event.KeyAdapter
 import java.awt.event.KeyEvent
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
+import java.util.concurrent.atomic.AtomicLong
 import javax.swing.JComponent
 import javax.swing.JList
 import javax.swing.JPanel
@@ -36,6 +37,7 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
     private val list = JBList(listModel)
     private val searchField = SearchTextField()
     private var currentQuery: String = ""
+    private val filterGeneration = AtomicLong()
 
     private val searchAlarm = com.intellij.util.Alarm(com.intellij.util.Alarm.ThreadToUse.POOLED_THREAD, disposable)
     private val statusLabel = javax.swing.JLabel()
@@ -195,6 +197,7 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
     }
 
     private fun filter(text: String) {
+        val generation = filterGeneration.incrementAndGet()
         searchAlarm.cancelAllRequests()
         searchAlarm.addRequest({
             val query = text.trim().lowercase()
@@ -203,7 +206,7 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
             } else {
                 allItems.mapNotNull { item ->
                     val pathScore = calculateMatchScore(query, item.path.lowercase())
-                    
+
                     if (pathScore >= 0) Pair(item, pathScore) else null
                 }
                 .sortedByDescending { it.second }
@@ -211,7 +214,7 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
             }
 
             ApplicationManager.getApplication().invokeLater({
-                if (!isDisposed) {
+                if (!isDisposed && generation == filterGeneration.get()) {
                     currentQuery = text.trim()
                     updateList(filtered)
                     list.repaint()

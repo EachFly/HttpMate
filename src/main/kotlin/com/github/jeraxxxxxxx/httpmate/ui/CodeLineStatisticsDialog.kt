@@ -125,7 +125,7 @@ class CodeLineStatisticsDialog(
         // Progress bar visualization
         if (totalLines > 0) {
             panel.add(Box.createVerticalStrut(10))
-            val barPanel = createStackedBar(totalCode, totalComments, totalBlanks, totalLines)
+            val barPanel = createStackedBar(totalCode, totalComments, totalBlanks)
             panel.add(barPanel)
         }
 
@@ -135,7 +135,7 @@ class CodeLineStatisticsDialog(
     /**
      * 创建比例可视化条形图
      */
-    private fun createStackedBar(code: Int, comments: Int, blanks: Int, total: Int): JPanel {
+    private fun createStackedBar(code: Int, comments: Int, blanks: Int): JPanel {
         val panel = JPanel(BorderLayout(0, 4))
         panel.isOpaque = false
 
@@ -150,9 +150,11 @@ class CodeLineStatisticsDialog(
 
                 val w = width
                 val h = height
-                val codeW = (code.toDouble() / total * w).toInt()
-                val commentW = (comments.toDouble() / total * w).toInt()
-                val blankW = w - codeW - commentW
+                val classifiedTotal = (code + comments + blanks).coerceAtLeast(1)
+                val codeW = (code.toDouble() / classifiedTotal * w).toInt().coerceIn(0, w)
+                val commentW = (comments.toDouble() / classifiedTotal * w).toInt()
+                    .coerceIn(0, (w - codeW).coerceAtLeast(0))
+                val blankW = (w - codeW - commentW).coerceAtLeast(0)
 
                 // Code - Blue
                 g2.color = Color(66, 133, 244)

@@ -11,6 +11,7 @@ import com.intellij.psi.PsiTypes
 import com.intellij.psi.util.PsiTypesUtil
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 import kotlin.random.Random
 
 /**
@@ -28,8 +29,8 @@ class MockJsonGenerator : JsonGenerator {
                 PsiTypes.booleanType() -> random.nextBoolean().toString()
                 PsiTypes.byteType(), PsiTypes.shortType(), PsiTypes.intType() -> random.nextInt(0, 100).toString()
                 PsiTypes.longType() -> random.nextLong(0, 10000).toString()
-                PsiTypes.floatType() -> String.format("%.2f", random.nextDouble(0.0, 100.0))
-                PsiTypes.doubleType() -> String.format("%.2f", random.nextDouble(0.0, 100.0))
+                PsiTypes.floatType() -> String.format(Locale.ROOT, "%.2f", random.nextDouble(0.0, 100.0))
+                PsiTypes.doubleType() -> String.format(Locale.ROOT, "%.2f", random.nextDouble(0.0, 100.0))
                 else -> "null"
             }
         }
@@ -48,6 +49,7 @@ class MockJsonGenerator : JsonGenerator {
         ).toString()
         if (canonicalText == "java.lang.Long") return random.nextLong(0, 10000).toString()
         if (canonicalText == "java.lang.Double" || canonicalText == "java.lang.Float" || canonicalText == "java.math.BigDecimal") return String.format(
+            Locale.ROOT,
             "%.2f",
             random.nextDouble(0.0, 100.0)
         )

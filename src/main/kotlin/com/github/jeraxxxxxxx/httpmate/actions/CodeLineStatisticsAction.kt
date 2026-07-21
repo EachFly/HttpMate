@@ -7,6 +7,7 @@ import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
@@ -93,7 +94,7 @@ class CodeLineStatisticsAction : AnAction() {
                             InputStreamReader(file.inputStream, file.charset).use { reader -> reader.readText() }
                         }
                         val ext = file.extension?.lowercase().orEmpty()
-                        val stats = analyzeFile(content, ext)
+                        val stats = CodeLineAnalyzer.analyze(content, ext)
                         fileStatsList.add(
                             FileStats(
                                 fileName = file.name,
@@ -105,6 +106,8 @@ class CodeLineStatisticsAction : AnAction() {
                                 blankLines = stats.blankLines
                             )
                         )
+                    } catch (e: ProcessCanceledException) {
+                        throw e
                     } catch (_: Exception) {
                         // Skip unreadable files
                     }
@@ -126,77 +129,6 @@ class CodeLineStatisticsAction : AnAction() {
         return e.getData(CommonDataKeys.VIRTUAL_FILE)
     }
 
-    private fun analyzeFile(content: String, extension: String): LineAnalysisResult {
-        val lines = content.lines()
-        val totalLines = lines.size
-        var codeLines = 0
-        var commentLines = 0
-        var blankLines = 0
-        var inBlockComment = false
-
-        val supportsComments = extension in setOf(
-            "java", "kt", "kts", "js", "ts", "c", "cpp", "h", "hpp",
-            "go", "rs", "groovy", "gradle", "css"
-        )
-
-        for (line in lines) {
-            val trimmed = line.trim()
-
-            if (trimmed.isEmpty()) {
-                blankLines++
-                continue
-            }
-
-            if (!supportsComments) {
-                codeLines++
-                continue
-            }
-
-            if (inBlockComment) {
-                commentLines++
-                val closeIdx = trimmed.indexOf("*/")
-                if (closeIdx >= 0) {
-                    inBlockComment = false
-                    val afterClose = trimmed.substring(closeIdx + 2).trim()
-                    if (afterClose.isNotEmpty() && !afterClose.startsWith("//")) {
-                        codeLines++
-                    }
-                }
-                continue
-            }
-
-            when {
-                trimmed.startsWith("//") -> {
-                    commentLines++
-                }
-                trimmed.startsWith("/*") -> {
-                    commentLines++
-                    if (!trimmed.contains("*/")) {
-                        inBlockComment = true
-                    }
-                }
-                trimmed.contains("/*") -> {
-                    codeLines++
-                    commentLines++
-                    if (!trimmed.contains("*/")) {
-                        inBlockComment = true
-                    }
-                }
-                else -> {
-                    codeLines++
-                }
-            }
-        }
-
-        return LineAnalysisResult(totalLines, codeLines, commentLines, blankLines)
-    }
-
-    data class LineAnalysisResult(
-        val totalLines: Int,
-        val codeLines: Int,
-        val commentLines: Int,
-        val blankLines: Int
-    )
 }
 
 data class FileStats(
