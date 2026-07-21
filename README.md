@@ -112,7 +112,7 @@ build/distributions/
 
 ```properties
 pluginName = HttpMate
-pluginVersion = 1.2.1
+pluginVersion = 1.2.2
 platformType = IC
 platformVersion = 2024.3.6
 pluginSinceBuild = 243

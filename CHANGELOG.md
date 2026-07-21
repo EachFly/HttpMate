@@ -1,5 +1,35 @@
 # HttpMate Changelog
 
+## [1.2.2] - 2026-07-21
+
+### Fixed / 修复
+
+- **REST API Scanning / REST API 扫描**:
+  - Expanded multi-path and multi-method mappings into complete endpoint combinations.
+  - 将多路径、多请求方法映射展开为完整的接口组合。
+  - Resolved constant path expressions in Spring and JAX-RS annotations.
+  - 支持解析 Spring 与 JAX-RS 注解中的常量路径表达式。
+- **Generated Files / 生成文件**:
+  - Added stable identity suffixes to generated JSON and Markdown filenames to prevent collisions between overloaded methods and same-named classes.
+  - 为生成的 JSON 与 Markdown 文件名增加稳定标识，避免重载方法及同名类互相覆盖。
+- **Code Line Statistics / 代码行统计**:
+  - Added language-aware comment parsing for Python, YAML, properties, SQL, XML, HTML, Markdown, and C-style languages.
+  - 新增针对 Python、YAML、properties、SQL、XML、HTML、Markdown 及 C 风格语言的注释识别。
+  - Ensured each physical line is classified exactly once and prevented invalid stacked-bar widths.
+  - 确保每个物理行仅归入一个类别，并避免统计图出现无效宽度。
+- **Stability / 稳定性**:
+  - Preserved IntelliJ cancellation semantics instead of reporting cancellations as errors.
+  - 保留 IntelliJ 平台的取消语义，不再将用户取消误报为错误。
+  - Made mock JSON decimal formatting locale-independent.
+  - 修复 Mock JSON 小数格式受系统区域设置影响的问题。
+  - Prevented stale asynchronous search tasks from replacing newer results.
+  - 防止过期的异步搜索任务覆盖最新结果。
+
+### Tests / 测试
+
+- Added regression coverage for multi-path mappings, multiple HTTP methods, constant paths, filename collisions, locale-independent JSON, and multi-language comment analysis.
+- 新增多路径、多请求方法、常量路径、文件名冲突、JSON 区域设置及多语言注释统计的回归测试。
+
 ## [1.2.1] - 2026-06-21
 
 ### Dependencies / 依赖升级
