@@ -26,10 +26,7 @@ internal object CodeLineAnalyzer {
 
             while (index < line.length) {
                 if (inBlockComment) {
-                    val blockClose = syntax.blockClose
-                    if (blockClose == null) {
-                        break
-                    }
+                    val blockClose = syntax.blockClose ?: break
                     val closeIndex = line.indexOf(blockClose, index)
                     if (closeIndex < 0) {
                         break
