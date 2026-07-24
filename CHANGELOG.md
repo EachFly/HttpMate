@@ -442,9 +442,3 @@
 - **Shortcuts / 快捷键**:
   - Fixed shortcut conflicts and invalid keymap definitions in `plugin.xml`.
   - 修复了快捷键冲突和 `plugin.xml` 中的无效定义。
-
-## [Unreleased]
-
-### Added
-
-- Initial scaffold created from [IntelliJ Platform Plugin Template](https://github.com/JetBrains/intellij-platform-plugin-template)
