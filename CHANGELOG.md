@@ -1,5 +1,29 @@
 # HttpMate Changelog
 
+## [1.2.3] - 2026-07-24
+
+### Improved / 优化
+
+- **Icon System / 图标系统**:
+  - Redesigned the plugin logo and all action icons around the bold Protocol Spark identity.
+  - 以醒目的 Protocol Spark 视觉重绘插件 Logo 与全部功能图标。
+  - Added distinct, transparent action icons and dedicated palettes for light and dark IDE themes.
+  - 为浅色与深色 IDE 主题提供独立配色，并将功能图标统一为透明背景。
+
+### Fixed / 修复
+
+- **Code Quality / 代码质量**:
+  - Resolved the nullable control-flow inspection reported by Qodana.
+  - 修复 Qodana 报告的可空控制流检查问题。
+
+### Changed / 变更
+
+- **Release Automation / 发布自动化**:
+  - Draft releases now load notes from the changelog section matching the current plugin version.
+  - Draft Release 现在会读取与当前插件版本匹配的 changelog 章节。
+  - Removed the obsolete Unreleased patching and changelog pull-request flow.
+  - 移除旧的 Unreleased 回填与 changelog Pull Request 流程。
+
 ## [1.2.2] - 2026-07-21
 
 ### Fixed / 修复
