@@ -1,5 +1,21 @@
 # HttpMate Changelog
 
+## [1.2.4] - 2026-08-25
+
+### Improved / 优化
+
+- Increased the Gradle Wrapper download timeout and retry count to improve build reliability on slower networks.
+- 提高 Gradle Wrapper 下载超时时间与重试次数，改善慢速网络下的构建稳定性。
+
+### Dependencies / 依赖升级
+
+- Upgraded Gradle Wrapper from 9.6.1 to 9.7.1 and aligned the wrapper task configuration.
+- 将 Gradle Wrapper 从 9.6.1 升级至 9.7.1，并同步 wrapper 任务配置。
+- Upgraded `gradle/actions` from 6 to 6.3.0 across GitHub Actions workflows.
+- 将 GitHub Actions 工作流中的 `gradle/actions` 从 6 升级至 6.3.0。
+- Upgraded the Qodana Gradle plugin and `JetBrains/qodana-action` from 2026.1.3 to 2026.2.0.
+- 将 Qodana Gradle 插件与 `JetBrains/qodana-action` 从 2026.1.3 升级至 2026.2.0。
+
 ## [1.2.3] - 2026-07-24
 
 ### Improved / 优化
