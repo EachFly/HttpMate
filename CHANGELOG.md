@@ -6,6 +6,8 @@
 
 - Increased the Gradle Wrapper download timeout and retry count to improve build reliability on slower networks.
 - 提高 Gradle Wrapper 下载超时时间与重试次数，改善慢速网络下的构建稳定性。
+- Aligned the Qodana Community for JVM linter with the 2026.2 toolchain to eliminate CLI compatibility warnings.
+- 将 Qodana Community for JVM linter 与 2026.2 工具链对齐，消除 CLI 版本兼容性警告。
 
 ### Dependencies / 依赖升级
 
