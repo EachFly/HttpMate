@@ -278,7 +278,7 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
     override fun doOKAction() {
         val selected = list.selectedValue
         if (selected != null) {
-            val element = ApplicationManager.getApplication().runReadAction(Computable<com.intellij.psi.PsiElement?> {
+            val element = ApplicationManager.getApplication().runReadAction(Computable {
                 selected.element
             })
             if (element != null && element.isValid) {

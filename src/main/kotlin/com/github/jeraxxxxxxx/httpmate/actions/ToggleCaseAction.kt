@@ -73,7 +73,7 @@ class ToggleCaseAction : AnAction() {
                 if (finalChoice) {
                     applyConversion(project, editor, selectedValue.result)
                 }
-                return PopupStep.FINAL_CHOICE
+                return FINAL_CHOICE
             }
 
             override fun isSpeedSearchEnabled(): Boolean = true

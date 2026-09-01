@@ -217,7 +217,7 @@ class CodeLineStatisticsDialog(
             ): Component {
                 val formatted = if (value is Double) format.format(value) else value
                 val comp = super.getTableCellRendererComponent(table, formatted, isSelected, hasFocus, row, column)
-                horizontalAlignment = SwingConstants.RIGHT
+                horizontalAlignment = RIGHT
                 foreground = if (isSelected) table.selectionForeground else Color(100, 100, 100)
                 return comp
             }
@@ -230,7 +230,7 @@ class CodeLineStatisticsDialog(
             ): Component {
                 val formatted = if (value is Number) "%,d".format(value.toLong()) else value
                 val comp = super.getTableCellRendererComponent(table, formatted, isSelected, hasFocus, row, column)
-                horizontalAlignment = SwingConstants.RIGHT
+                horizontalAlignment = RIGHT
                 return comp
             }
         }

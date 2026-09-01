@@ -132,7 +132,7 @@ intellijPlatformTesting {
                         "-Djb.consents.confirmation.enabled=false",
                         "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
                         "--add-opens=java.base/java.lang=ALL-UNNAMED",
-                        "-Djava.util.concurrent.ForkJoinPool.common.threadFactory=java.util.concurrent.Executors\$DefaultThreadFactory"
+                        $$"-Djava.util.concurrent.ForkJoinPool.common.threadFactory=java.util.concurrent.Executors$DefaultThreadFactory"
                     )
                 }
             }

@@ -41,7 +41,7 @@ abstract class BaseGenerateJsonAction : AnAction() {
 
                     try {
                         val result =
-                            ApplicationManager.getApplication().runReadAction(Computable<Pair<String, String>?> {
+                            ApplicationManager.getApplication().runReadAction(Computable {
                                 val targetClass = classPointer.element ?: return@Computable null
                                 val fileStem = GeneratedFileNames.forClass(targetClass)
                                 val generator = getGenerator()

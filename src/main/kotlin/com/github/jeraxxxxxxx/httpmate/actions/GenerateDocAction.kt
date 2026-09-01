@@ -71,7 +71,7 @@ class GenerateDocAction : AnAction() {
 
                 try {
                     val result =
-                        ApplicationManager.getApplication().runReadAction(Computable<Triple<String, String, String>?> {
+                        ApplicationManager.getApplication().runReadAction(Computable {
                             val psiMethod = psiMethodPointer.element ?: return@Computable null
                             val fileName = GeneratedFileNames.forMethod(psiMethod)
                             Triple(
@@ -111,7 +111,7 @@ class GenerateDocAction : AnAction() {
 
                 try {
                     val result =
-                        ApplicationManager.getApplication().runReadAction(Computable<GeneratedClassDoc?> {
+                        ApplicationManager.getApplication().runReadAction(Computable {
                             val psiClass = psiClassPointer.element ?: return@Computable null
                             val className = psiClass.name ?: "Unknown"
                             val built = buildClassDoc(psiClass) ?: return@Computable null
