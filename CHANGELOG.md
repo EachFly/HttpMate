@@ -1,5 +1,21 @@
 # HttpMate Changelog
 
+## [1.2.5] - 2026-09-13
+
+### Fixed / 修复
+
+- Resolved eight Qodana inspection findings by removing unnecessary type arguments and redundant qualifiers, and simplifying a Gradle string literal with multi-dollar interpolation.
+- 修复 Qodana 报告的 8 项检查问题：移除不必要的泛型参数与多余限定名，并使用多美元符号插值简化 Gradle 字符串。
+
+### Dependencies / 依赖升级
+
+- Upgraded the Kotlin JVM plugin from 2.4.10 to 2.4.20.
+- 将 Kotlin JVM 插件从 2.4.10 升级至 2.4.20。
+- Upgraded the Qodana Gradle plugin and `JetBrains/qodana-action` from 2026.2.0 to 2026.2.1.
+- 将 Qodana Gradle 插件与 `JetBrains/qodana-action` 从 2026.2.0 升级至 2026.2.1。
+- Upgraded `actions/setup-java` from 5 to 6 across GitHub Actions workflows.
+- 将 GitHub Actions 工作流中的 `actions/setup-java` 从 5 升级至 6。
+
 ## [1.2.4] - 2026-08-25
 
 ### Improved / 优化
