@@ -1,5 +1,22 @@
 # HttpMate Changelog
 
+## [1.2.6] - 2026-10-10
+
+### Dependencies / 依赖升级
+
+- Upgraded Gradle Wrapper from 9.7.1 to 9.8.0 and aligned the wrapper task configuration.
+- 将 Gradle Wrapper 从 9.7.1 升级至 9.8.0，并同步 wrapper 任务配置。
+- Upgraded the IntelliJ Platform Gradle plugin from 2.18.1 to 2.19.0.
+- 将 IntelliJ Platform Gradle 插件从 2.18.1 升级至 2.19.0。
+- Upgraded Kover from 0.9.9 to 0.9.11.
+- 将 Kover 从 0.9.9 升级至 0.9.11。
+- Upgraded the Qodana Gradle plugin and `JetBrains/qodana-action` from 2026.2.1 to 2026.2.2.
+- 将 Qodana Gradle 插件与 `JetBrains/qodana-action` 从 2026.2.1 升级至 2026.2.2。
+- Upgraded `gradle/actions` from 6.3.0 to 6.4.0 across GitHub Actions workflows.
+- 将 GitHub Actions 工作流中的 `gradle/actions` 从 6.3.0 升级至 6.4.0。
+- Upgraded `jlumbroso/free-disk-space` from 1.3.1 to 2.0.0.
+- 将 `jlumbroso/free-disk-space` 从 1.3.1 升级至 2.0.0。
+
 ## [1.2.5] - 2026-09-13
 
 ### Fixed / 修复
