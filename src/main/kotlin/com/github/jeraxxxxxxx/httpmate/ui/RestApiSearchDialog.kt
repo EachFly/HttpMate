@@ -13,6 +13,7 @@ import com.intellij.ui.SearchTextField
 import com.intellij.ui.SimpleTextAttributes
 import com.intellij.ui.components.JBList
 import com.intellij.ui.components.JBScrollPane
+import com.intellij.util.OpenSourceUtil
 import java.awt.BorderLayout
 import java.awt.Dimension
 import java.awt.event.KeyAdapter
@@ -286,11 +287,13 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
                     ?: element.navigationElement as? com.intellij.pom.Navigatable
 
                 if (navigatable?.canNavigate() == true) {
-                    navigatable.navigate(true)
+                    OpenSourceUtil.navigate(true, navigatable)
                 } else {
                     element.containingFile?.virtualFile?.let { file ->
-                        com.intellij.openapi.fileEditor.OpenFileDescriptor(project, file, selected.navigationOffset)
-                            .navigate(true)
+                        OpenSourceUtil.navigate(
+                            true,
+                            com.intellij.openapi.fileEditor.OpenFileDescriptor(project, file, selected.navigationOffset)
+                        )
                     }
                 }
             }
