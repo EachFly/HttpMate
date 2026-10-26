@@ -8,6 +8,7 @@ import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.progress.ProgressIndicator
@@ -15,7 +16,7 @@ import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.DumbService
 import com.intellij.openapi.ui.Messages
-import com.intellij.openapi.util.Computable
+import java.util.concurrent.Callable
 
 /**
  * REST API 搜索 Action
@@ -47,10 +48,9 @@ class RestApiSearchAction : AnAction() {
 
                     val items = try {
                         val scanner = RestApiScanner(project)
-                        val candidates = ApplicationManager.getApplication()
-                            .runReadAction(Computable {
-                                scanner.collectApiCandidates()
-                            })
+                        val candidates = ReadAction.nonBlocking(Callable {
+                            scanner.collectApiCandidates()
+                        }).inSmartMode(project).expireWith(project).executeSynchronously()
 
                         val result = mutableListOf<RestApiItem>()
                         val batches = candidates.chunked(200)
@@ -63,9 +63,9 @@ class RestApiSearchAction : AnAction() {
                                 HttpMateBundle.message("rest.search.progress.batch", index + 1, totalBatches)
                             indicator.fraction = (index + 1).toDouble() / totalBatches
 
-                            result += ApplicationManager.getApplication().runReadAction(Computable {
+                            result += ReadAction.nonBlocking(Callable {
                                 scanner.scanBatch(batch)
-                            })
+                            }).inSmartMode(project).expireWith(project).executeSynchronously()
                         }
 
                         if (result.isEmpty()) {
@@ -73,11 +73,7 @@ class RestApiSearchAction : AnAction() {
                             indicator.text2 = HttpMateBundle.message("rest.search.progress.files")
                             thisLogger().info("Standard scan returned 0 items. Trying fallback scan.")
                             result.clear()
-                            result.addAll(
-                                ApplicationManager.getApplication().runReadAction(Computable {
-                                    scanner.scanFallback()
-                                })
-                            )
+                            result.addAll(scanner.scanFallback())
                         }
 
                         thisLogger().info("Scanned ${result.size} items")

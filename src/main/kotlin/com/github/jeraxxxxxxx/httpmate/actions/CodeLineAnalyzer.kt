@@ -4,8 +4,11 @@ internal object CodeLineAnalyzer {
     private data class CommentSyntax(
         val linePrefixes: List<String> = emptyList(),
         val blockOpen: String? = null,
-        val blockClose: String? = null
+        val blockClose: String? = null,
+        val multilineStrings: List<MultilineString> = emptyList()
     )
+
+    private data class MultilineString(val delimiter: String, val escapes: Boolean = true)
 
     fun analyze(content: String, extension: String): LineAnalysisResult {
         if (content.isEmpty()) return LineAnalysisResult(0, 0, 0, 0)
@@ -18,13 +21,24 @@ internal object CodeLineAnalyzer {
         var commentLines = 0
         var blankLines = 0
         var inBlockComment = false
+        var multilineString: MultilineString? = null
 
         for (line in lines) {
             var index = 0
-            var hasCode = false
+            var hasCode = multilineString != null
             var hasComment = inBlockComment
 
             while (index < line.length) {
+                val activeString = multilineString
+                if (activeString != null) {
+                    hasCode = true
+                    val end = findStringEnd(line, index, activeString)
+                    if (end < 0) break
+                    index = end + activeString.delimiter.length
+                    multilineString = null
+                    continue
+                }
+
                 if (inBlockComment) {
                     val blockClose = syntax.blockClose ?: break
                     val closeIndex = line.indexOf(blockClose, index)
@@ -57,6 +71,13 @@ internal object CodeLineAnalyzer {
                 }
 
                 val current = line[index]
+                val stringStart = syntax.multilineStrings.firstOrNull { line.startsWith(it.delimiter, index) }
+                if (stringStart != null) {
+                    hasCode = true
+                    multilineString = stringStart
+                    index += stringStart.delimiter.length
+                    continue
+                }
                 if (current == '"' || current == '\'' || current == '`') {
                     hasCode = true
                     index = skipQuotedText(line, index, current)
@@ -77,6 +98,20 @@ internal object CodeLineAnalyzer {
         return LineAnalysisResult(lines.size, codeLines, commentLines, blankLines)
     }
 
+    private fun findStringEnd(line: String, start: Int, string: MultilineString): Int {
+        var index = start
+        while (index < line.length) {
+            if (string.escapes && line[index] == '\\') {
+                index += 2
+            } else if (line.startsWith(string.delimiter, index)) {
+                return index
+            } else {
+                index++
+            }
+        }
+        return -1
+    }
+
     private fun skipQuotedText(line: String, start: Int, quote: Char): Int {
         var index = start + 1
         while (index < line.length) {
@@ -94,11 +129,20 @@ internal object CodeLineAnalyzer {
 
     private fun syntaxFor(extension: String): CommentSyntax {
         return when (extension.lowercase()) {
-            "java", "kt", "kts", "js", "ts", "c", "cpp", "h", "hpp",
-            "go", "rs", "groovy", "gradle" -> CommentSyntax(listOf("//"), "/*", "*/")
+            "java" -> CommentSyntax(listOf("//"), "/*", "*/", listOf(MultilineString("\"\"\"")))
+            "kt", "kts" -> CommentSyntax(listOf("//"), "/*", "*/", listOf(MultilineString("\"\"\"", false)))
+            "js", "ts" -> CommentSyntax(listOf("//"), "/*", "*/", listOf(MultilineString("`")))
+            "go" -> CommentSyntax(listOf("//"), "/*", "*/", listOf(MultilineString("`", false)))
+            "groovy", "gradle" -> CommentSyntax(
+                listOf("//"), "/*", "*/", listOf(MultilineString("\"\"\""), MultilineString("'''"))
+            )
+            "c", "cpp", "h", "hpp", "rs" -> CommentSyntax(listOf("//"), "/*", "*/")
 
             "css" -> CommentSyntax(blockOpen = "/*", blockClose = "*/")
-            "py", "yaml", "yml" -> CommentSyntax(listOf("#"))
+            "py" -> CommentSyntax(linePrefixes = listOf("#"), multilineStrings = listOf(
+                MultilineString("\"\"\""), MultilineString("'''")
+            ))
+            "yaml", "yml" -> CommentSyntax(listOf("#"))
             "properties" -> CommentSyntax(listOf("#", "!"))
             "sql" -> CommentSyntax(listOf("--"), "/*", "*/")
             "xml", "html", "md" -> CommentSyntax(blockOpen = "<!--", blockClose = "-->")

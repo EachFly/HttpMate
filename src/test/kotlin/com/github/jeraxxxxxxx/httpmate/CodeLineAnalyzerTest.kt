@@ -47,6 +47,37 @@ class CodeLineAnalyzerTest {
         assertEquals(LineCounts.ZERO, CodeLineAnalyzer.analyze("", "java").toCounts())
     }
 
+    @Test
+    fun multilineStringsContainCodeRatherThanComments() {
+        val quotes = "\"\"\""
+        val content = "val text = $quotes\n// not a comment\n/* not a comment */\n\n$quotes // real inline comment\n// real comment"
+        for (extension in listOf("kt", "kts", "java")) {
+            assertEquals(LineCounts(6, 5, 1, 0), CodeLineAnalyzer.analyze(content, extension).toCounts())
+        }
+    }
+
+    @Test
+    fun templateStringsResumeCommentParsingAfterClosing() {
+        val tick = 96.toChar()
+        val content = "const text = $tick\n// string\n/* string */\n$tick; /* real comment\nstill a comment */\nconst next = 1;"
+        for (extension in listOf("js", "ts", "go")) {
+            assertEquals(LineCounts(6, 5, 1, 0), CodeLineAnalyzer.analyze(content, extension).toCounts())
+        }
+    }
+
+    @Test
+    fun escapedTemplateDelimitersDoNotTerminateTheString() {
+        val tick = 96.toChar()
+        val content = "const text = $tick\n\\$tick\n// string\n$tick;\n// comment"
+        assertEquals(LineCounts(5, 4, 1, 0), CodeLineAnalyzer.analyze(content, "js").toCounts())
+    }
+
+    @Test
+    fun pythonTripleQuotesRetainTheirStringMeaning() {
+        val content = "text = '''\n# string\n'''\n# comment"
+        assertEquals(LineCounts(4, 3, 1, 0), CodeLineAnalyzer.analyze(content, "py").toCounts())
+    }
+
     private fun com.github.jeraxxxxxxx.httpmate.actions.LineAnalysisResult.toCounts() =
         LineCounts(totalLines, codeLines, commentLines, blankLines)
 

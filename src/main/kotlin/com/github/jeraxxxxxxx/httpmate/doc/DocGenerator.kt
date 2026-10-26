@@ -270,8 +270,30 @@ class DocGenerator {
     }
 
     private fun isRequired(param: PsiParameter): String {
-        val requestParam = param.getAnnotation("org.springframework.web.bind.annotation.RequestParam")
-        return if (requestParam?.findAttributeValue("required")?.text == "false") "否" else "是"
+        if (param.type.canonicalText.substringBefore('<') == "java.util.Optional" ||
+            param.annotations.any { it.qualifiedName in NULLABLE_ANNOTATIONS }
+        ) return "否"
+
+        val binding = param.annotations.firstOrNull { it.qualifiedName in REQUEST_BINDINGS } ?: return "是"
+        val helper = JavaPsiFacade.getInstance(param.project).constantEvaluationHelper
+        val required = binding.findAttributeValue("required")?.let { helper.computeConstantExpression(it) }
+        if (required == false) return "否"
+
+        val defaultValue = binding.findAttributeValue("defaultValue")?.let { evaluateString(binding, it) }
+        return if (defaultValue != null && defaultValue != DEFAULT_NONE) "否" else "是"
+    }
+
+    private companion object {
+        // Spring's ValueConstants.DEFAULT_NONE distinguishes no default from an explicit empty default.
+        const val DEFAULT_NONE = "\n\t\t\n\t\t\n\uE000\uE001\uE002\n\t\t\t\t\n"
+        val REQUEST_BINDINGS = setOf(
+            "RequestParam", "RequestBody", "RequestHeader", "CookieValue",
+            "PathVariable", "RequestPart", "MatrixVariable"
+        ).map { "org.springframework.web.bind.annotation.$it" }.toSet()
+        val NULLABLE_ANNOTATIONS = setOf(
+            "org.jetbrains.annotations.Nullable", "javax.annotation.Nullable", "jakarta.annotation.Nullable",
+            "org.springframework.lang.Nullable", "org.jspecify.annotations.Nullable"
+        )
     }
 
     private fun shouldExpand(psiClass: PsiClass?, type: PsiType): Boolean {

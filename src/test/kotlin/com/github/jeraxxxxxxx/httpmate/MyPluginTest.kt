@@ -4,12 +4,16 @@ import com.github.jeraxxxxxxx.httpmate.actions.ActionContextResolver
 import com.github.jeraxxxxxxx.httpmate.actions.GeneratedFileNames
 import com.github.jeraxxxxxxx.httpmate.doc.DocGenerator
 import com.github.jeraxxxxxxx.httpmate.generator.MockJsonGenerator
+import com.github.jeraxxxxxxx.httpmate.generator.DefaultJsonGenerator
+import com.github.jeraxxxxxxx.httpmate.generator.JsonFieldResolver
 import com.github.jeraxxxxxxx.httpmate.services.HttpMateProjectService
 import com.github.jeraxxxxxxx.httpmate.services.RestApiScanner
 import com.intellij.ide.highlighter.XmlFileType
 import com.intellij.openapi.application.ReadAction
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
 import com.intellij.testFramework.TestDataPath
+import com.intellij.testFramework.PlatformTestUtil
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import com.intellij.util.PsiErrorElementUtil
 import com.intellij.psi.PsiClassOwner
@@ -18,6 +22,7 @@ import com.intellij.psi.PsiTypes
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.psi.xml.XmlFile
 import java.util.Locale
+import java.util.concurrent.Callable
 
 @TestDataPath("\$CONTENT_ROOT/src/test/testData")
 class MyPluginTest : BasePlatformTestCase() {
@@ -299,6 +304,109 @@ class MyPluginTest : BasePlatformTestCase() {
         assertEquals("MethodContextController", ActionContextResolver.findPsiClass(methodIdentifier)?.name)
     }
 
+    fun testFallbackScanCreatesValidNavigationPointersWithoutAnOuterReadLock() {
+        myFixture.addFileToProject("src/com/example/FallbackController.java", """
+            package com.example;
+            class FallbackController {
+                @RequestMapping("/users") public void users() {}
+            }
+            @RequestMapping("/admin") class AdminController {
+                @GetMapping("/users") public void users() {}
+            }
+        """.trimIndent())
+
+        val future = ApplicationManager.getApplication().executeOnPooledThread(Callable {
+            assertFalse(ApplicationManager.getApplication().isReadAccessAllowed)
+            RestApiScanner(project).scanFallback()
+        })
+        val items = PlatformTestUtil.waitForFuture(future, 20_000)
+        assertEquals(setOf("ALL" to "/users", "GET" to "/admin/users"), items.map { it.method to it.path }.toSet())
+        ReadAction.run<RuntimeException> {
+            items.forEach { item ->
+                val element = item.element
+                assertNotNull(element)
+                assertTrue(element!!.isValid)
+                assertTrue(element.containingFile.text.substring(item.navigationOffset).startsWith("@"))
+            }
+        }
+    }
+
+    fun testJsonGenerationSubstitutesGenericAndInheritedFieldTypes() {
+        myFixture.addFileToProject("src/java/util/List.java", """
+            package java.util;
+            public interface List<E> {}
+        """.trimIndent())
+        val file = myFixture.addFileToProject("src/com/example/GenericTypes.java", """
+            package com.example;
+            class User { String name; }
+            class Envelope<T> { T data; }
+            class Parent<T> { T inherited; }
+            class Child<U> extends Parent<java.util.List<U>> { U direct; }
+            class GenericTypes {
+                Envelope<User> response;
+                Child<User> child;
+            }
+        """.trimIndent())
+
+        ReadAction.run<RuntimeException> {
+            val owner = (file as PsiClassOwner).classes.first { it.name == "GenericTypes" }
+            val responseType = owner.findFieldByName("response", false)!!.type
+            val childType = owner.findFieldByName("child", false)!!.type
+            val fields = JsonFieldResolver.resolve(childType).associate { it.name to it.type.canonicalText }
+            assertEquals("com.example.User", fields["direct"])
+            assertEquals("java.util.List<com.example.User>", fields["inherited"])
+            for (generator in listOf(DefaultJsonGenerator(), MockJsonGenerator())) {
+                val json = generator.generate(responseType, 0)
+                assertTrue(json.contains("\"data\": {"))
+                assertTrue(json.contains("\"name\":"))
+            }
+            val mock = MockJsonGenerator().generate(childType, 0)
+            assertTrue(mock.contains("\"inherited\": ["))
+            assertTrue(mock.substringAfter("\"inherited\":").contains("\"name\":"))
+        }
+    }
+
+    fun testDocumentationRequiredFlagsRespectBindingsAndDefaults() {
+        addRestAnnotationStubs()
+        myFixture.addFileToProject("src/org/springframework/lang/Nullable.java", """
+            package org.springframework.lang;
+            public @interface Nullable {}
+        """.trimIndent())
+        val file = myFixture.addFileToProject("src/com/example/OptionalController.java", """
+            package com.example;
+            import org.springframework.web.bind.annotation.PostMapping;
+            import org.springframework.web.bind.annotation.RequestBody;
+            import org.springframework.web.bind.annotation.RequestParam;
+            import org.springframework.web.bind.annotation.RequestHeader;
+            import org.springframework.web.bind.annotation.PathVariable;
+            import org.springframework.web.bind.annotation.ValueConstants;
+            class OptionalController {
+                static final boolean OPTIONAL = false;
+                static final String FALLBACK = "fallback";
+                @PostMapping("/optional")
+                public void handle(
+                    @RequestBody(required = OPTIONAL) String body,
+                    @RequestParam(defaultValue = FALLBACK) String query,
+                    @RequestParam(defaultValue = "") String emptyDefault,
+                    @RequestParam(defaultValue = ValueConstants.DEFAULT_NONE) String required,
+                    @RequestHeader(defaultValue = "en") String language,
+                    @PathVariable(required = false) String id,
+                    @RequestParam java.util.Optional<String> wrapped,
+                    @org.springframework.lang.Nullable @RequestBody String nullableBody
+                ) {}
+            }
+        """.trimIndent())
+        val markdown = ReadAction.compute<String, RuntimeException> {
+            val method = PsiTreeUtil.findChildrenOfType(file, PsiMethod::class.java).first { it.name == "handle" }
+            DocGenerator().generate(method)
+        }
+        for (name in listOf("body", "query", "emptyDefault", "language", "id", "nullableBody")) {
+            assertTrue("Expected optional parameter: $name\n$markdown", markdown.contains("| $name | String | 否 |"))
+        }
+        assertTrue(markdown.contains("| required | String | 是 |"))
+        assertTrue(markdown.contains("| wrapped | Optional<String> | 否 |"))
+    }
+
     private fun addRestAnnotationStubs() {
         myFixture.addFileToProject(
             "src/org/springframework/web/bind/annotation/RequestMapping.java",
@@ -367,6 +475,7 @@ class MyPluginTest : BasePlatformTestCase() {
             package org.springframework.web.bind.annotation;
             public @interface RequestParam {
               boolean required() default true;
+              String defaultValue() default ValueConstants.DEFAULT_NONE;
             }
             """.trimIndent()
         )
@@ -374,7 +483,7 @@ class MyPluginTest : BasePlatformTestCase() {
             "src/org/springframework/web/bind/annotation/RequestBody.java",
             """
             package org.springframework.web.bind.annotation;
-            public @interface RequestBody {}
+            public @interface RequestBody { boolean required() default true; }
             """.trimIndent()
         )
         myFixture.addFileToProject(
@@ -400,6 +509,23 @@ class MyPluginTest : BasePlatformTestCase() {
             public @interface GET {}
             """.trimIndent()
         )
+        myFixture.addFileToProject("src/org/springframework/web/bind/annotation/ValueConstants.java", """
+            package org.springframework.web.bind.annotation;
+            public interface ValueConstants {
+                String DEFAULT_NONE = "\n\t\t\n\t\t\n\uE000\uE001\uE002\n\t\t\t\t\n";
+            }
+        """.trimIndent())
+        myFixture.addFileToProject("src/org/springframework/web/bind/annotation/RequestHeader.java", """
+            package org.springframework.web.bind.annotation;
+            public @interface RequestHeader {
+                boolean required() default true;
+                String defaultValue() default ValueConstants.DEFAULT_NONE;
+            }
+        """.trimIndent())
+        myFixture.addFileToProject("src/org/springframework/web/bind/annotation/PathVariable.java", """
+            package org.springframework.web.bind.annotation;
+            public @interface PathVariable { boolean required() default true; }
+        """.trimIndent())
     }
 
     override fun getTestDataPath() = "src/test/testData/rename"

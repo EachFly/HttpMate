@@ -3,7 +3,6 @@ package com.github.jeraxxxxxxx.httpmate.generator
 import com.github.jeraxxxxxxx.httpmate.constants.AppConstants
 import com.intellij.psi.PsiArrayType
 import com.intellij.psi.PsiEnumConstant
-import com.intellij.psi.PsiModifier
 import com.intellij.psi.PsiPrimitiveType
 import com.intellij.psi.PsiType
 import com.intellij.psi.PsiTypes
@@ -58,7 +57,7 @@ class DefaultJsonGenerator : JsonGenerator {
         val sb = StringBuilder()
         sb.append("{\n")
 
-        val fields = psiClass.allFields.filter { !it.hasModifierProperty(PsiModifier.STATIC) }
+        val fields = JsonFieldResolver.resolve(type)
         val indent = "  ".repeat(depth + 1)
 
         fields.forEachIndexed { index, field ->

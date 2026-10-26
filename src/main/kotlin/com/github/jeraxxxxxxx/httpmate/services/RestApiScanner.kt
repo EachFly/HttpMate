@@ -3,6 +3,7 @@ package com.github.jeraxxxxxxx.httpmate.services
 import com.github.jeraxxxxxxx.httpmate.constants.RestAnnotations
 import com.github.jeraxxxxxxx.httpmate.model.RestApiItem
 import com.github.jeraxxxxxxx.httpmate.ui.RestApiIcons
+import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.progress.ProgressManager
@@ -26,14 +27,6 @@ import com.intellij.util.Processor
  * 扫描项目中的 Spring Boot 和 JAX-RS REST API 定义
  */
 class RestApiScanner(private val project: Project) {
-
-    // Regex patterns for fallback scan
-    private val requestMappingRegex =
-        Regex("@(RequestMapping|GetMapping|PostMapping|PutMapping|DeleteMapping|PatchMapping|Path)\\s*\\(\\s*(?:[a-zA-Z0-9_]+\\s*=\\s*)?[\"']([^\"']+)[\"']")
-    private val classMappingRegex =
-        Regex("@(RequestMapping|Path)\\s*\\(\\s*(?:[a-zA-Z0-9_]+\\s*=\\s*)?[\"']([^\"']+)[\"']")
-    private val methodAttributeRegex = Regex("method\\s*=\\s*(?:RequestMethod\\.)?([A-Z]+)")
-    private val jaxRsVerbRegex = Regex("@(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)(?![a-zA-Z])")
 
     /**
      * 扫描项目中的所有 REST API
@@ -214,21 +207,46 @@ class RestApiScanner(private val project: Project) {
     }
 
     /**
-     * 使用文本正则扫描作为后备方案
-     * 当 PSI 索引未准备好或需要扫描非索引文件时使用
+     * 按声明结构扫描文本作为后备方案；调用方不应持有读锁。
+     * 文件快照和导航指针使用短读任务，文本解析在读锁之外完成。
      * @return 扫描到的 REST API 列表
      */
     fun scanFallback(): List<RestApiItem> {
         val items = mutableListOf<RestApiItem>()
         thisLogger().info("Starting fallback text scan...")
 
-        val allFiles = collectProjectFiles()
+        val allFiles = readModel { collectProjectFiles() }
         val psiManager = com.intellij.psi.PsiManager.getInstance(project)
 
         for (virtualFile in allFiles) {
             ProgressManager.checkCanceled()
-            val file = psiManager.findFile(virtualFile) ?: continue
-            items.addAll(scanFileForApis(file))
+            // If a write invalidates a snapshot, retry this file rather than attach stale offsets.
+            while (true) {
+                ProgressManager.checkCanceled()
+                val snapshot = readModel {
+                    if (!virtualFile.isValid) return@readModel null
+                    val file = psiManager.findFile(virtualFile) ?: return@readModel null
+                    file.text to file.modificationStamp
+                } ?: break
+                val endpoints = FallbackApiParser.parse(snapshot.first, ProgressManager::checkCanceled)
+                val fileItems = readModel {
+                    if (!virtualFile.isValid) return@readModel emptyList()
+                    val file = psiManager.findFile(virtualFile) ?: return@readModel emptyList()
+                    if (file.modificationStamp != snapshot.second) return@readModel null
+                    endpoints.map { endpoint ->
+                        RestApiItem(
+                            method = endpoint.method,
+                            path = endpoint.path,
+                            fileName = file.name,
+                            navigationOffset = endpoint.offset,
+                            elementPointer = SmartPointerManager.createPointer(file.findElementAt(endpoint.offset) ?: file),
+                            icon = RestApiIcons.getIcon(endpoint.method)
+                        )
+                    }
+                } ?: continue
+                items.addAll(fileItems)
+                break
+            }
         }
 
         thisLogger().info("Fallback scan found ${items.size} items")
@@ -242,50 +260,8 @@ class RestApiScanner(private val project: Project) {
         return javaFiles + ktFiles
     }
 
-    private fun scanFileForApis(file: com.intellij.psi.PsiFile): List<RestApiItem> {
-        val items = mutableListOf<RestApiItem>()
-        val text = file.text
-
-        // Simple heuristic: find class level mapping
-        var classPath = ""
-        val classMatch = classMappingRegex.find(text)
-        if (classMatch != null) {
-            classPath = classMatch.groupValues[2]
-        }
-
-        // Find method mappings
-        val matches = requestMappingRegex.findAll(text)
-        for (match in matches) {
-            ProgressManager.checkCanceled()
-            val annotationType = match.groupValues[1]
-            val path = match.groupValues[2]
-
-            // Skip if it looks like the class level mapping we just found (crude check)
-            if (path == classPath && (annotationType == "RequestMapping" || annotationType == "Path")) continue
-
-            val fullPath = combinePaths(classPath, path)
-            var method = mapAnnotationToMethod(annotationType)
-
-            // Refine method if needed
-            method = refineMethodFromContext(annotationType, match, text, method)
-
-            // Find the element offset to navigate to
-            val offset = match.range.first
-            val element = file.findElementAt(offset) ?: file
-            val pointer = SmartPointerManager.createPointer(element)
-            items.add(
-                RestApiItem(
-                    method = method,
-                    path = fullPath,
-                    fileName = file.name,
-                    navigationOffset = offset,
-                    elementPointer = pointer,
-                    icon = RestApiIcons.getIcon(method)
-                )
-            )
-        }
-        return items
-    }
+    private fun <T> readModel(action: () -> T): T =
+        ReadAction.nonBlocking<T> { action() }.inSmartMode(project).expireWith(project).executeSynchronously()
 
     private fun findRestAnnotation(method: PsiMethod): Pair<String, PsiAnnotation>? {
         for (annotation in method.annotations) {
@@ -299,59 +275,4 @@ class RestApiScanner(private val project: Project) {
         return null
     }
 
-    private fun refineMethodFromContext(
-        annotationType: String,
-        match: MatchResult,
-        text: String,
-        defaultMethod: String
-    ): String {
-        var method = defaultMethod
-
-        // If it's RequestMapping, try to find the method attribute
-        if (annotationType == "RequestMapping") {
-            val range = match.range
-            // Expand range to find closing ')'
-            var endIndex = range.last
-            var openCount = 1
-            while (endIndex < text.length && openCount > 0) {
-                endIndex++
-                if (endIndex < text.length) {
-                    if (text[endIndex] == '(') openCount++
-                    if (text[endIndex] == ')') openCount--
-                }
-            }
-
-            if (endIndex < text.length) {
-                val annotationContent = text.substring(range.first, endIndex + 1)
-                val methodMatch = methodAttributeRegex.find(annotationContent)
-                if (methodMatch != null) {
-                    method = methodMatch.groupValues[1]
-                }
-            }
-        } else if (annotationType == "Path") {
-            // For JAX-RS @Path, look for @GET, @POST etc. in the vicinity
-            // We look 200 chars before and after the @Path match
-            val startSearch = (match.range.first - 200).coerceAtLeast(0)
-            val endSearch = (match.range.last + 200).coerceAtMost(text.length)
-            val vicinityText = text.substring(startSearch, endSearch)
-
-            val verbMatch = jaxRsVerbRegex.find(vicinityText)
-            if (verbMatch != null) {
-                method = verbMatch.groupValues[1]
-            }
-        }
-        return method
-    }
-
-    private fun mapAnnotationToMethod(annotation: String): String {
-        return when (annotation) {
-            "GetMapping" -> "GET"
-            "PostMapping" -> "POST"
-            "PutMapping" -> "PUT"
-            "DeleteMapping" -> "DELETE"
-            "PatchMapping" -> "PATCH"
-            "RequestMapping", "Path" -> "ALL"
-            else -> "UNKNOWN"
-        }
-    }
 }

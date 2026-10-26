@@ -53,7 +53,7 @@ class CodeLineStatisticsAction : AnAction() {
                 if (target.isDirectory) {
                     VfsUtilCore.visitChildrenRecursively(target, object : VirtualFileVisitor<Void>() {
                         override fun visitFile(file: VirtualFile): Boolean {
-                            if (indicator.isCanceled) return false
+                            indicator.checkCanceled()
                             if (!file.isDirectory) {
                                 val ext = file.extension?.lowercase().orEmpty()
                                 if (ext in targetExtensions) {
@@ -85,13 +85,22 @@ class CodeLineStatisticsAction : AnAction() {
                 val totalFiles = allFiles.size
 
                 for ((index, file) in allFiles.withIndex()) {
-                    if (indicator.isCanceled) return
+                    indicator.checkCanceled()
                     indicator.fraction = (index + 1).toDouble() / totalFiles
                     indicator.text2 = file.name
 
                     try {
-                        val content = ApplicationManager.getApplication().runReadAction<String> {
-                            InputStreamReader(file.inputStream, file.charset).use { reader -> reader.readText() }
+                        // VFS streams can be read on this background thread without a PSI read lock.
+                        val content = InputStreamReader(file.inputStream, file.charset).use { reader ->
+                            val buffer = CharArray(8192)
+                            buildString {
+                                while (true) {
+                                    indicator.checkCanceled()
+                                    val count = reader.read(buffer)
+                                    if (count < 0) break
+                                    append(buffer, 0, count)
+                                }
+                            }
                         }
                         val ext = file.extension?.lowercase().orEmpty()
                         val stats = CodeLineAnalyzer.analyze(content, ext)
