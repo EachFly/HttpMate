@@ -1,5 +1,37 @@
 # HttpMate Changelog
 
+## [1.2.7] - 2026-10-26
+
+### Fixed / 修复
+
+- Reworked fallback REST API scanning around declaration structure to distinguish class and method mappings, retain endpoints without class-level paths, and ignore mappings inside comments and strings.
+- 按声明结构重构 REST API 兜底扫描，正确区分类与方法映射，保留没有类级路径的接口，并忽略注释和字符串中的伪映射。
+- Resolved generic type arguments, including inherited generic fields, in default and mock JSON generation.
+- 修复普通 JSON 与 Mock JSON 生成中的泛型实参解析，支持泛型父类字段。
+- Corrected required-parameter documentation for optional request bindings, default values, Optional wrappers, and nullable annotations.
+- 修正文档中可选请求绑定、默认值、Optional 类型及可空注解对应的参数必填标记。
+- Preserved multiline string state when counting code lines to avoid misclassifying embedded comment markers.
+- 代码行统计保留多行字符串状态，避免将字符串中的注释符号误判为注释。
+- Routed REST API search navigation through the platform's OpenSourceUtil entry point to address newer IDE override-only API restrictions.
+- REST API 搜索跳转改用平台 OpenSourceUtil 入口，适配新版 IDE 对仅允许重写 API 的调用限制。
+
+### Improved / 优化
+
+- Replaced blocking scan read actions with write-priority cancellable reads; moved fallback text parsing and statistics file I/O outside read locks.
+- 扫描改用可为写操作让路的可取消读任务，并将兜底文本解析与统计文件读取移到读锁之外。
+
+### Dependencies / 依赖升级
+
+- Upgraded Gradle Wrapper from 9.8.0 to 9.8.2 and aligned the wrapper task configuration.
+- 将 Gradle Wrapper 从 9.8.0 升级至 9.8.2，并同步 wrapper 任务配置。
+- Upgraded the Kotlin JVM plugin from 2.4.20 to 2.4.21.
+- 将 Kotlin JVM 插件从 2.4.20 升级至 2.4.21。
+
+### Tests / 测试
+
+- Added regression coverage for fallback scanning and navigation pointers, generic JSON fields, parameter required flags, and multiline string analysis.
+- 新增兜底扫描与导航指针、JSON 泛型字段、参数必填标记及多行字符串统计的回归测试。
+
 ## [1.2.6] - 2026-10-10
 
 ### Dependencies / 依赖升级
