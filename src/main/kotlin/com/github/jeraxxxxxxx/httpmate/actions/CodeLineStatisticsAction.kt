@@ -98,7 +98,7 @@ class CodeLineStatisticsAction : AnAction() {
                                     indicator.checkCanceled()
                                     val count = reader.read(buffer)
                                     if (count < 0) break
-                                    append(buffer, 0, count)
+                                    appendRange(buffer, 0, count)
                                 }
                             }
                         }
