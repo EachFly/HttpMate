@@ -7,14 +7,12 @@ import com.github.jeraxxxxxxx.httpmate.services.HttpMateProjectService
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
-import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
-import com.intellij.openapi.util.Computable
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiDocumentManager
@@ -36,6 +34,7 @@ class GenerateDocAction : AnAction() {
         val documentManager = PsiDocumentManager.getInstance(project)
         documentManager.commitAllDocuments()
         documentManager.performWhenAllCommitted {
+            if (project.isDisposed) return@performWhenAllCommitted
             getPsiMethodFromContext(e)?.let {
                 generateMethodDocAsync(project, SmartPointerManager.createPointer(it))
                 return@performWhenAllCommitted
@@ -71,8 +70,8 @@ class GenerateDocAction : AnAction() {
 
                 try {
                     val result =
-                        ApplicationManager.getApplication().runReadAction(Computable {
-                            val psiMethod = psiMethodPointer.element ?: return@Computable null
+                        ProjectBackgroundWork.read(project) {
+                            val psiMethod = psiMethodPointer.element ?: return@read null
                             val fileName = GeneratedFileNames.forMethod(psiMethod)
                             Triple(
                                 fileName,
@@ -81,9 +80,9 @@ class GenerateDocAction : AnAction() {
                                 }/$fileName.md",
                                 docGenerator.generate(psiMethod)
                             )
-                        }) ?: return
+                        } ?: return
 
-                    saveDocToFileAsync(project, result.first, result.third) {
+                    saveDocToFile(project, indicator, result.first, result.third) {
                         val service = project.getService(HttpMateProjectService::class.java)
                         service.recordGeneration("${result.first}.md")
                         Messages.showInfoMessage(
@@ -95,7 +94,7 @@ class GenerateDocAction : AnAction() {
                 } catch (e: ProcessCanceledException) {
                     throw e
                 } catch (e: Exception) {
-                    showGenerationError(project, e)
+                    showGenerationError(project, indicator, e)
                 }
             }
         })
@@ -111,18 +110,18 @@ class GenerateDocAction : AnAction() {
 
                 try {
                     val result =
-                        ApplicationManager.getApplication().runReadAction(Computable {
-                            val psiClass = psiClassPointer.element ?: return@Computable null
+                        ProjectBackgroundWork.read(project) {
+                            val psiClass = psiClassPointer.element ?: return@read null
                             val className = psiClass.name ?: "Unknown"
-                            val built = buildClassDoc(psiClass) ?: return@Computable null
+                            val built = buildClassDoc(psiClass) ?: return@read null
                             GeneratedClassDoc(
                                 content = built.first,
                                 methodCount = built.second,
                                 className = className,
                                 fileStem = GeneratedFileNames.forClass(psiClass)
                             )
-                        }) ?: run {
-                            ApplicationManager.getApplication().invokeLater {
+                        } ?: run {
+                            ProjectBackgroundWork.later(project, indicator) {
                                 Messages.showInfoMessage(
                                     project,
                                     HttpMateBundle.message("doc.generate.class.empty"),
@@ -135,7 +134,7 @@ class GenerateDocAction : AnAction() {
                     val service = project.getService(HttpMateProjectService::class.java)
                     val targetFile = File(service.getDocOutputPath(), "${result.fileStem}.md")
 
-                    saveDocToFileAsync(project, result.fileStem, result.content) {
+                    saveDocToFile(project, indicator, result.fileStem, result.content) {
                         service.recordGeneration("${result.fileStem}.md")
                         Messages.showInfoMessage(
                             project,
@@ -151,7 +150,7 @@ class GenerateDocAction : AnAction() {
                 } catch (e: ProcessCanceledException) {
                     throw e
                 } catch (e: Exception) {
-                    showGenerationError(project, e)
+                    showGenerationError(project, indicator, e)
                 }
             }
         })
@@ -160,6 +159,7 @@ class GenerateDocAction : AnAction() {
     private fun buildClassDoc(psiClass: PsiClass): Pair<String, Int>? {
         val className = psiClass.name ?: "Unknown"
         val methods = psiClass.methods.filter { method ->
+            ProgressManager.checkCanceled()
             method.hasModifierProperty(PsiModifier.PUBLIC) && hasRestAnnotation(method)
         }
 
@@ -179,6 +179,7 @@ class GenerateDocAction : AnAction() {
             append("---\n\n")
 
             methods.forEachIndexed { index, method ->
+                ProgressManager.checkCanceled()
                 if (index > 0) {
                     append("\n---\n\n")
                 }
@@ -195,47 +196,26 @@ class GenerateDocAction : AnAction() {
         }
     }
 
-    private fun saveDocToFileAsync(
+    private fun saveDocToFile(
         project: Project,
+        indicator: ProgressIndicator,
         className: String,
         content: String,
         onSuccess: (() -> Unit)? = null
     ) {
+        ProjectBackgroundWork.checkActive(project, indicator)
         val service = project.getService(HttpMateProjectService::class.java)
         val targetDir = File(service.getDocOutputPath())
-
-        ApplicationManager.getApplication().executeOnPooledThread {
-            try {
-                if (!targetDir.exists() && !targetDir.mkdirs()) {
-                    ApplicationManager.getApplication().invokeLater {
-                        Messages.showErrorDialog(
-                            project,
-                            HttpMateBundle.message(
-                                "action.generate.error",
-                                "API documentation",
-                                "Failed to create directory: ${targetDir.absolutePath}"
-                            ),
-                            HttpMateBundle.message("dialog.error.title")
-                        )
-                    }
-                    return@executeOnPooledThread
-                }
-
-                val targetFile = File(targetDir, "$className.md")
-                targetFile.writeText(content)
-
-                ApplicationManager.getApplication().invokeLater {
-                    LocalFileSystem.getInstance().refreshAndFindFileByIoFile(targetFile)?.refresh(false, false)
-                    onSuccess?.invoke()
-                }
-            } catch (e: Exception) {
-                showGenerationError(project, e)
-            }
+        val targetFile = File(targetDir, "$className.md")
+        ProjectBackgroundWork.writeText(project, indicator, targetFile, content)
+        ProjectBackgroundWork.later(project, indicator) {
+            LocalFileSystem.getInstance().refreshAndFindFileByIoFile(targetFile)?.refresh(false, false)
+            onSuccess?.invoke()
         }
     }
 
-    private fun showGenerationError(project: Project, throwable: Throwable) {
-        ApplicationManager.getApplication().invokeLater {
+    private fun showGenerationError(project: Project, indicator: ProgressIndicator, throwable: Throwable) {
+        ProjectBackgroundWork.later(project, indicator) {
             Messages.showErrorDialog(
                 project,
                 HttpMateBundle.message(

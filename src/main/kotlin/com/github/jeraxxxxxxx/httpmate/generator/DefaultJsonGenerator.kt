@@ -1,6 +1,7 @@
 package com.github.jeraxxxxxxx.httpmate.generator
 
 import com.github.jeraxxxxxxx.httpmate.constants.AppConstants
+import com.intellij.openapi.progress.ProgressManager
 import com.intellij.psi.PsiArrayType
 import com.intellij.psi.PsiEnumConstant
 import com.intellij.psi.PsiPrimitiveType
@@ -10,6 +11,7 @@ import com.intellij.psi.util.PsiTypesUtil
 
 class DefaultJsonGenerator : JsonGenerator {
     override fun generate(type: PsiType, depth: Int): String {
+        ProgressManager.checkCanceled()
         if (depth > AppConstants.MAX_JSON_RECURSION_DEPTH) return "{}" // Prevent infinite recursion
 
         if (type is PsiPrimitiveType) {
@@ -35,15 +37,7 @@ class DefaultJsonGenerator : JsonGenerator {
         if (canonicalText == "java.lang.Boolean") return "false"
 
         // Handle Date and Time
-        if (canonicalText == "java.util.Date" || canonicalText == "java.sql.Date" ||
-            canonicalText == "java.sql.Timestamp" || canonicalText == "java.time.LocalDateTime" ||
-            canonicalText == "java.time.LocalDate" || canonicalText == "java.time.LocalTime" ||
-            canonicalText == "java.time.ZonedDateTime"
-        ) {
-            val now = java.time.LocalDateTime.now()
-            val formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
-            return "\"${now.format(formatter)}\""
-        }
+        JsonTemporalValues.generate(canonicalText)?.let { return it }
 
         if (canonicalText.startsWith("java.util.List") || canonicalText.startsWith("java.util.Set") || type is PsiArrayType) return "[]"
         if (canonicalText.startsWith("java.util.Map")) return "{}"

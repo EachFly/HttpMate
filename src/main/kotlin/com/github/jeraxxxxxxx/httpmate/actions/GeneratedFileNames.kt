@@ -4,6 +4,7 @@ import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiMethod
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
+import java.nio.file.Path
 
 internal object GeneratedFileNames {
     fun forClass(psiClass: PsiClass): String {
@@ -22,8 +23,15 @@ internal object GeneratedFileNames {
     }
 
     private fun classIdentity(psiClass: PsiClass): String {
-        return psiClass.qualifiedName
-            ?: "${psiClass.containingFile?.virtualFile?.path}:${psiClass.textOffset}:${psiClass.name}"
+        val filePath = psiClass.containingFile?.virtualFile?.path
+        val basePath = psiClass.project.basePath
+        val sourceIdentity = if (filePath != null && basePath != null) {
+            val source = Path.of(filePath).normalize()
+            val base = Path.of(basePath).normalize()
+            if (source.startsWith(base)) base.relativize(source).toString().replace('\\', '/') else filePath
+        } else filePath ?: psiClass.containingFile?.name.orEmpty()
+        val className = psiClass.qualifiedName ?: "${psiClass.textOffset}:${psiClass.name}"
+        return "$sourceIdentity#$className"
     }
 
     private fun withIdentitySuffix(readableName: String, identity: String): String {

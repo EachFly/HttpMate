@@ -2,6 +2,7 @@ package com.github.jeraxxxxxxx.httpmate
 
 import com.github.jeraxxxxxxx.httpmate.actions.ActionContextResolver
 import com.github.jeraxxxxxxx.httpmate.actions.GeneratedFileNames
+import com.github.jeraxxxxxxx.httpmate.actions.ProjectBackgroundWork
 import com.github.jeraxxxxxxx.httpmate.doc.DocGenerator
 import com.github.jeraxxxxxxx.httpmate.generator.MockJsonGenerator
 import com.github.jeraxxxxxxx.httpmate.generator.DefaultJsonGenerator
@@ -19,10 +20,16 @@ import com.intellij.util.PsiErrorElementUtil
 import com.intellij.psi.PsiClassOwner
 import com.intellij.psi.PsiMethod
 import com.intellij.psi.PsiTypes
+import com.intellij.psi.SmartPointerManager
+import com.intellij.psi.JavaPsiFacade
+import com.intellij.openapi.progress.EmptyProgressIndicator
+import com.intellij.openapi.progress.ProcessCanceledException
+import com.intellij.openapi.util.io.FileUtil
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.psi.xml.XmlFile
 import java.util.Locale
 import java.util.concurrent.Callable
+import java.io.File
 
 @TestDataPath("\$CONTENT_ROOT/src/test/testData")
 class MyPluginTest : BasePlatformTestCase() {
@@ -407,6 +414,141 @@ class MyPluginTest : BasePlatformTestCase() {
         assertTrue(markdown.contains("| wrapped | Optional<String> | 否 |"))
     }
 
+    fun testIdenticalEndpointsAndClassNamesInDifferentSourceRootsAreNotCollapsed() {
+        addRestAnnotationStubs()
+        val source = """
+            package example;
+            import org.springframework.web.bind.annotation.GetMapping;
+            public class Controller { @GetMapping("/same") public void handle() {} }
+        """.trimIndent()
+        val files = listOf("module-a", "module-b").map {
+            myFixture.addFileToProject("$it/src/example/Controller.java", source)
+        }
+        ReadAction.run<RuntimeException> {
+            val classes = files.map { (it as PsiClassOwner).classes.single() }
+            val methods = classes.map { it.findMethodsByName("handle", false).single() }
+            assertEquals(methods[0].textOffset, methods[1].textOffset)
+            val pointers = methods.map { SmartPointerManager.createPointer(it) }
+            val items = RestApiScanner(project).scanBatch(pointers + pointers)
+            assertEquals(2, items.size)
+            assertEquals(2, items.map { it.elementPointer.virtualFile?.url }.toSet().size)
+            assertEquals(2, classes.map(GeneratedFileNames::forClass).toSet().size)
+            assertEquals(2, methods.map(GeneratedFileNames::forMethod).toSet().size)
+        }
+    }
+
+    fun testSpringClassMethodsAreSharedByScannerAndDocumentation() {
+        addRestAnnotationStubs()
+        val file = myFixture.addFileToProject("src/example/MethodsController.java", """
+            package example;
+            import org.springframework.web.bind.annotation.RequestMapping;
+            import org.springframework.web.bind.annotation.RequestMethod;
+            import org.springframework.web.bind.annotation.GetMapping;
+            @RequestMapping(value="/api", method=RequestMethod.POST)
+            class MethodsController {
+                @RequestMapping("/inherited") public void inherited() {}
+                @GetMapping("/both") public void both() {}
+            }
+        """.trimIndent())
+        ReadAction.run<RuntimeException> {
+            val methods = (file as PsiClassOwner).classes.single().methods
+            val items = RestApiScanner(project).scanBatch(methods.map { SmartPointerManager.createPointer(it) })
+            assertEquals(setOf("POST" to "/api/inherited", "POST" to "/api/both", "GET" to "/api/both"),
+                items.map { it.method to it.path }.toSet())
+            assertTrue(DocGenerator().generate(methods.first { it.name == "inherited" }).contains("| 请求方式 | POST |"))
+            assertTrue(DocGenerator().generate(methods.first { it.name == "both" }).contains("| 请求方式 | POST, GET |"))
+        }
+    }
+
+    fun testDocumentationResolvesGenericAndInheritedFieldsForEachInstantiation() {
+        val file = myFixture.addFileToProject("src/example/GenericController.java", """
+            package example;
+            class User { String name; }
+            class Other { int count; }
+            class Parent<T> { /** inherited description */ T inherited; }
+            class Envelope<T> extends Parent<String> { T data; }
+            class GenericController {
+                public Envelope<User> handle(Envelope<User> users, Envelope<Other> others) { return null; }
+            }
+        """.trimIndent())
+        ReadAction.run<RuntimeException> {
+            val method = (file as PsiClassOwner).classes.last().methods.single()
+            val markdown = DocGenerator().generate(method)
+            assertTrue(markdown.contains("**Envelope<User>**"))
+            assertTrue(markdown.contains("**Envelope<Other>**"))
+            assertTrue(markdown.contains("| data | User |"))
+            assertTrue(markdown.contains("| data | Other |"))
+            assertTrue(markdown.contains("| inherited | String |"))
+            assertTrue(markdown.contains("inherited description"))
+            assertFalse(markdown.contains("| data | T |"))
+            assertTrue(markdown.contains("\"name\":"))
+            val responseTable = markdown.substringAfter("## 响应参数").substringBefore("## 请求示例")
+            assertTrue(responseTable.contains("| data | User |"))
+            assertTrue(responseTable.contains("| inherited | String | inherited description |"))
+        }
+    }
+
+    fun testCanceledGenerationDoesNotReplaceExistingFileOrShowQueuedResults() {
+        val directory = FileUtil.createTempDirectory("httpmate-output-test", null, true)
+        try {
+            val target = File(directory, "generated/result.json")
+            val indicator = EmptyProgressIndicator()
+            ProjectBackgroundWork.writeText(project, indicator, target, "original")
+            var displayed = false
+            ProjectBackgroundWork.later(project, indicator) { displayed = true }
+            indicator.cancel()
+            try {
+                ProjectBackgroundWork.writeText(project, indicator, target, "replacement")
+                fail("Canceled generation must not write output")
+            } catch (_: ProcessCanceledException) {
+                assertEquals("original", target.readText())
+            }
+            PlatformTestUtil.dispatchAllEventsInIdeEventQueue()
+            assertFalse(displayed)
+            assertEquals(listOf("result.json"), target.parentFile.listFiles()!!.map { it.name })
+        } finally {
+            FileUtil.delete(directory)
+        }
+    }
+
+    fun testFallbackScanResolvesImportedJavaConstantsAndConcatenations() {
+        myFixture.addFileToProject("example/Routes.java", """
+            package example;
+            public class Routes {
+                public static final String API = "/api";
+                public static final String USERS = "/users";
+            }
+        """.trimIndent())
+        myFixture.addFileToProject("src/example/ConstantController.java", """
+            package example;
+            import example.Routes;
+            import static example.Routes.API;
+            @RequestMapping(API)
+            class ConstantController {
+                @GetMapping(Routes.USERS + "/active") public void handle() {}
+                @GetMapping(UNKNOWN + "/wrong") public void unknown() {}
+            }
+        """.trimIndent())
+        val future = ApplicationManager.getApplication().executeOnPooledThread(Callable {
+            RestApiScanner(project).scanFallback().map { it.method to it.path }.toSet()
+        })
+        assertEquals(setOf("GET" to "/api/users/active"), PlatformTestUtil.waitForFuture(future, 20_000))
+    }
+
+    fun testBothJsonGeneratorsUseTypeSpecificTemporalFormats() {
+        val context = myFixture.addFileToProject("TemporalTypes.java", "class TemporalTypes {}")
+        val factory = JavaPsiFacade.getElementFactory(project)
+        for (generator in listOf(DefaultJsonGenerator(), MockJsonGenerator())) {
+            fun value(name: String) = generator.generate(factory.createTypeFromText(name, context), 0).trim('"')
+            java.time.LocalDate.parse(value("java.time.LocalDate"))
+            java.time.LocalTime.parse(value("java.time.LocalTime"))
+            java.time.LocalDateTime.parse(value("java.time.LocalDateTime"))
+            java.time.ZonedDateTime.parse(value("java.time.ZonedDateTime"))
+            java.time.OffsetDateTime.parse(value("java.time.OffsetDateTime"))
+            java.time.Instant.parse(value("java.time.Instant"))
+        }
+    }
+
     private fun addRestAnnotationStubs() {
         myFixture.addFileToProject(
             "src/org/springframework/web/bind/annotation/RequestMapping.java",
@@ -490,7 +632,7 @@ class MyPluginTest : BasePlatformTestCase() {
             "src/org/springframework/web/bind/annotation/RequestMethod.java",
             """
             package org.springframework.web.bind.annotation;
-            public enum RequestMethod { GET, POST, PUT, DELETE, PATCH }
+            public enum RequestMethod { GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS, TRACE }
             """.trimIndent()
         )
         myFixture.addFileToProject(

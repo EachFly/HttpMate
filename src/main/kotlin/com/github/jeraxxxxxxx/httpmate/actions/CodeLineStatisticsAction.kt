@@ -6,7 +6,6 @@ import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
-import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
@@ -71,7 +70,7 @@ class CodeLineStatisticsAction : AnAction() {
                 }
 
                 if (allFiles.isEmpty()) {
-                    ApplicationManager.getApplication().invokeLater {
+                    ProjectBackgroundWork.later(project, indicator) {
                         Messages.showInfoMessage(
                             project,
                             HttpMateBundle.message("code.stats.no.files"),
@@ -122,7 +121,7 @@ class CodeLineStatisticsAction : AnAction() {
                     }
                 }
 
-                ApplicationManager.getApplication().invokeLater {
+                ProjectBackgroundWork.later(project, indicator) {
                     val dialog = CodeLineStatisticsDialog(project, target.name, fileStatsList)
                     dialog.show()
                 }

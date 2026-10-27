@@ -2,6 +2,9 @@ package com.github.jeraxxxxxxx.httpmate.doc
 
 import com.github.jeraxxxxxxx.httpmate.constants.AppConstants
 import com.github.jeraxxxxxxx.httpmate.generator.MockJsonGenerator
+import com.github.jeraxxxxxxx.httpmate.generator.JsonFieldResolver
+import com.github.jeraxxxxxxx.httpmate.services.SpringRequestMethods
+import com.intellij.openapi.progress.ProgressManager
 import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.PsiAnnotation
 import com.intellij.psi.PsiAnnotationMemberValue
@@ -12,7 +15,6 @@ import com.intellij.psi.PsiLiteralExpression
 import com.intellij.psi.PsiReferenceExpression
 import com.intellij.psi.PsiField
 import com.intellij.psi.PsiMethod
-import com.intellij.psi.PsiModifier
 import com.intellij.psi.PsiParameter
 import com.intellij.psi.PsiPrimitiveType
 import com.intellij.psi.PsiType
@@ -23,6 +25,7 @@ class DocGenerator {
     private val mockJsonGenerator = MockJsonGenerator()
 
     fun generate(method: PsiMethod): String {
+        ProgressManager.checkCanceled()
         val className = method.containingClass?.name ?: "Unknown"
         val methodName = method.name
         val (httpMethod, path) = getApiInfo(method)
@@ -80,10 +83,11 @@ class DocGenerator {
             return
         }
 
-        val nestedTypes = linkedSetOf<PsiClass>()
+        val nestedTypes = linkedSetOf<PsiType>()
         append("| 参数名称 | 类型 | 必填 | 长度 | 说明 |\n")
         append("| --- | --- | --- | --- | --- |\n")
         params.forEach { param ->
+            ProgressManager.checkCanceled()
             val type = param.type
             append(
                 "| ${param.name} | ${type.presentableText} | ${isRequired(param)} | ${extractLengthConstraint(param)} | ${
@@ -95,18 +99,23 @@ class DocGenerator {
 
             val psiClass = PsiTypesUtil.getPsiClass(type)
             if (shouldExpand(psiClass, type)) {
-                nestedTypes += psiClass!!
+                nestedTypes += type
             }
         }
         append('\n')
 
+        appendNestedTypeTables(nestedTypes)
+    }
+
+    private fun StringBuilder.appendNestedTypeTables(nestedTypes: MutableSet<PsiType>) {
         val processedTypes = mutableSetOf<String>()
         repeat(AppConstants.MAX_NESTED_TYPE_DEPTH) {
             if (nestedTypes.isEmpty()) return
             val currentBatch = nestedTypes.toList()
             nestedTypes.clear()
-            currentBatch.forEach { psiClass ->
-                appendNestedTypeTable(psiClass, processedTypes, nestedTypes)
+            currentBatch.forEach { type ->
+                ProgressManager.checkCanceled()
+                appendNestedTypeTable(type, processedTypes, nestedTypes)
             }
         }
     }
@@ -114,9 +123,14 @@ class DocGenerator {
     private fun StringBuilder.appendResponseTable(type: PsiType) {
         val psiClass = PsiTypesUtil.getPsiClass(type)
         if (shouldExpand(psiClass, type)) {
-            ownInstanceFields(psiClass!!).forEach { field ->
-                append("| ${field.name} | ${field.type.presentableText} | ${extractFieldComment(field)} |\n")
+            val nestedTypes = linkedSetOf<PsiType>()
+            JsonFieldResolver.resolve(type).forEach { field ->
+                ProgressManager.checkCanceled()
+                append("| ${field.name} | ${field.type.presentableText} | ${extractFieldComment(field.declaration)} |\n")
+                if (shouldExpand(PsiTypesUtil.getPsiClass(field.type), field.type)) nestedTypes += field.type
             }
+            append('\n')
+            appendNestedTypeTables(nestedTypes)
             return
         }
 
@@ -124,29 +138,29 @@ class DocGenerator {
     }
 
     private fun StringBuilder.appendNestedTypeTable(
-        psiClass: PsiClass,
+        type: PsiType,
         processedTypes: MutableSet<String>,
-        nestedTypes: MutableSet<PsiClass>
+        nestedTypes: MutableSet<PsiType>
     ) {
-        val className = psiClass.qualifiedName ?: psiClass.name ?: return
-        if (!processedTypes.add(className)) return
+        if (!processedTypes.add(type.canonicalText)) return
 
-        append("**${psiClass.name}**\n\n")
+        append("**${type.presentableText}**\n\n")
         append("| 字段名称 | 类型 | 必填 | 长度 | 说明 |\n")
         append("| --- | --- | --- | --- | --- |\n")
 
-        ownInstanceFields(psiClass).forEach { field ->
+        JsonFieldResolver.resolve(type).forEach { field ->
+            ProgressManager.checkCanceled()
             append(
-                "| ${field.name} | ${field.type.presentableText} | 否 | ${extractFieldLengthConstraint(field)} | ${
+                "| ${field.name} | ${field.type.presentableText} | 否 | ${extractFieldLengthConstraint(field.declaration)} | ${
                     extractFieldComment(
-                        field
+                        field.declaration
                     )
                 } |\n"
             )
 
             val nestedClass = PsiTypesUtil.getPsiClass(field.type)
             if (shouldExpand(nestedClass, field.type)) {
-                nestedTypes += nestedClass!!
+                nestedTypes += field.type
             }
         }
         append('\n')
@@ -156,6 +170,7 @@ class DocGenerator {
         val classPaths = extractClassPaths(method.containingClass)
         var methodPaths = listOf("")
         val httpMethods = linkedSetOf<String>()
+        var springMapping = false
 
         for (annotation in method.annotations) {
             val name = annotation.qualifiedName ?: continue
@@ -171,13 +186,15 @@ class DocGenerator {
                 }
 
                 if (fixedMethod != null) {
+                    springMapping = true
                     httpMethods += fixedMethod
                     methodPaths = extractPaths(annotation)
                     break
                 }
 
                 if (name.endsWith("RequestMapping")) {
-                    httpMethods += extractRequestMethods(annotation)
+                    springMapping = true
+                    httpMethods += SpringRequestMethods.declared(annotation)
                     methodPaths = extractPaths(annotation)
                     break
                 }
@@ -197,7 +214,14 @@ class DocGenerator {
             }
         }
 
-        if (httpMethods.isEmpty()) {
+        if (springMapping) {
+            val combined = SpringRequestMethods.combine(
+                SpringRequestMethods.declared(method.containingClass?.getAnnotation(SpringRequestMethods.ANNOTATION)),
+                httpMethods.toList()
+            )
+            httpMethods.clear()
+            httpMethods.addAll(combined)
+        } else if (httpMethods.isEmpty()) {
             httpMethods += "ALL"
         }
 
@@ -233,16 +257,6 @@ class DocGenerator {
             .mapNotNull { evaluateString(annotation, it) }
             .distinct()
             .ifEmpty { listOf("") }
-    }
-
-    private fun extractRequestMethods(annotation: PsiAnnotation): List<String> {
-        val value = annotation.findDeclaredAttributeValue("method") ?: return listOf("ALL")
-        return flattenAnnotationValues(value)
-            .mapNotNull { member ->
-                member.text.substringAfterLast('.').trim().takeIf(String::isNotEmpty)
-            }
-            .distinct()
-            .ifEmpty { listOf("ALL") }
     }
 
     private fun flattenAnnotationValues(value: PsiAnnotationMemberValue): List<PsiAnnotationMemberValue> {
@@ -301,10 +315,6 @@ class DocGenerator {
                 !psiClass.isEnum &&
                 !type.canonicalText.startsWith("java.") &&
                 !isSimpleType(type)
-    }
-
-    private fun ownInstanceFields(psiClass: PsiClass): List<PsiField> {
-        return psiClass.fields.filterNot { it.hasModifierProperty(PsiModifier.STATIC) }
     }
 
     private fun isSimpleType(type: PsiType) = when {

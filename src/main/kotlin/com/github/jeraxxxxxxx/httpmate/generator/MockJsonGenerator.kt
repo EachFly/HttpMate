@@ -1,6 +1,7 @@
 package com.github.jeraxxxxxxx.httpmate.generator
 
 import com.github.jeraxxxxxxx.httpmate.constants.AppConstants
+import com.intellij.openapi.progress.ProgressManager
 import com.intellij.psi.PsiArrayType
 import com.intellij.psi.PsiClassType
 import com.intellij.psi.PsiEnumConstant
@@ -8,8 +9,7 @@ import com.intellij.psi.PsiPrimitiveType
 import com.intellij.psi.PsiType
 import com.intellij.psi.PsiTypes
 import com.intellij.psi.util.PsiTypesUtil
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
+import java.time.ZonedDateTime
 import java.util.Locale
 import kotlin.random.Random
 
@@ -21,6 +21,7 @@ class MockJsonGenerator : JsonGenerator {
     private val random = Random.Default
 
     override fun generate(type: PsiType, depth: Int): String {
+        ProgressManager.checkCanceled()
         if (depth > AppConstants.MAX_JSON_RECURSION_DEPTH) return "{}"
 
         if (type is PsiPrimitiveType) {
@@ -55,19 +56,8 @@ class MockJsonGenerator : JsonGenerator {
         if (canonicalText == "java.lang.Boolean") return random.nextBoolean().toString()
 
         // Handle Date and Time
-        if (canonicalText == "java.util.Date" || canonicalText == "java.sql.Date" ||
-            canonicalText == "java.sql.Timestamp" || canonicalText == "java.time.LocalDateTime" ||
-            canonicalText == "java.time.LocalDate" || canonicalText == "java.time.ZonedDateTime"
-        ) {
-            val now = LocalDateTime.now().minusDays(random.nextLong(0, 365))
-            val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
-            return "\"${now.format(formatter)}\""
-        }
-        if (canonicalText == "java.time.LocalTime") {
-            val now = LocalDateTime.now().minusHours(random.nextLong(0, 24))
-            val formatter = DateTimeFormatter.ofPattern("HH:mm:ss")
-            return "\"${now.format(formatter)}\""
-        }
+        JsonTemporalValues.generate(canonicalText, ZonedDateTime.now().minusDays(random.nextLong(0, 365)))
+            ?.let { return it }
 
         // Handle Collections
         if (canonicalText.startsWith("java.util.List") || canonicalText.startsWith("java.util.Set") || type is PsiArrayType) {

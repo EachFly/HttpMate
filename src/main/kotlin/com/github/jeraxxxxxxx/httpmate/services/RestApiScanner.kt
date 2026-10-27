@@ -13,6 +13,7 @@ import com.intellij.psi.PsiAnnotation
 import com.intellij.psi.PsiAnnotationMemberValue
 import com.intellij.psi.PsiArrayInitializerMemberValue
 import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiExpression
 import com.intellij.psi.PsiLiteralExpression
 import com.intellij.psi.PsiMethod
 import com.intellij.psi.PsiReferenceExpression
@@ -20,6 +21,7 @@ import com.intellij.psi.SmartPointerManager
 import com.intellij.psi.SmartPsiElementPointer
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.searches.AnnotatedElementsSearch
+import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.util.Processor
 
 /**
@@ -73,7 +75,13 @@ class RestApiScanner(private val project: Project) {
 
             val classPaths = extractClassPaths(method.containingClass)
             val methodPaths = extractPaths(method, annotation)
-            val httpMethods = extractMethods(method, annotationName, annotation)
+            val declaredMethods = extractMethods(method, annotationName, annotation)
+            val httpMethods = if (annotationName.startsWith("org.springframework.web.bind.annotation.")) {
+                SpringRequestMethods.combine(
+                    SpringRequestMethods.declared(method.containingClass?.getAnnotation(SpringRequestMethods.ANNOTATION)),
+                    declaredMethods
+                )
+            } else declaredMethods
 
             for (classPath in classPaths) {
                 for (methodPath in methodPaths) {
@@ -96,7 +104,9 @@ class RestApiScanner(private val project: Project) {
             }
         }
 
-        return items.distinctBy { Triple(it.method, it.path, it.navigationOffset) }
+        return items.distinctBy {
+            listOf(it.method, it.path, it.elementPointer.virtualFile?.url, it.navigationOffset)
+        }
     }
 
     private fun extractClassPaths(psiClass: com.intellij.psi.PsiClass?): List<String> {
@@ -177,14 +187,7 @@ class RestApiScanner(private val project: Project) {
             "org.springframework.web.bind.annotation.DeleteMapping" -> listOf("DELETE")
             "org.springframework.web.bind.annotation.PatchMapping" -> listOf("PATCH")
             "org.springframework.web.bind.annotation.RequestMapping" -> {
-                val methodAttr = annotation.findDeclaredAttributeValue("method")
-                    ?: return listOf("ALL")
-                flattenAnnotationValues(methodAttr)
-                    .mapNotNull { value ->
-                        value.text.substringAfterLast('.').trim().takeIf(String::isNotEmpty)
-                    }
-                    .distinct()
-                    .ifEmpty { listOf("ALL") }
+                SpringRequestMethods.declared(annotation).ifEmpty { listOf("ALL") }
             }
 
             "javax.ws.rs.GET", "jakarta.ws.rs.GET" -> listOf("GET")
@@ -228,7 +231,18 @@ class RestApiScanner(private val project: Project) {
                     val file = psiManager.findFile(virtualFile) ?: return@readModel null
                     file.text to file.modificationStamp
                 } ?: break
-                val endpoints = FallbackApiParser.parse(snapshot.first, ProgressManager::checkCanceled)
+                val endpoints = FallbackApiParser.parse(snapshot.first, ProgressManager::checkCanceled) { start, end ->
+                    if (virtualFile.extension != "java") null else readModel {
+                        val file = psiManager.findFile(virtualFile) ?: return@readModel null
+                        if (file.modificationStamp != snapshot.second) return@readModel null
+                        val expression = PsiTreeUtil.findElementOfClassAtRange(file, start, end, PsiExpression::class.java)
+                            ?: return@readModel null
+                        if (expression.textRange.startOffset != start || expression.textRange.endOffset != end) {
+                            return@readModel null
+                        }
+                        evaluateString(expression)
+                    }
+                }
                 val fileItems = readModel {
                     if (!virtualFile.isValid) return@readModel emptyList()
                     val file = psiManager.findFile(virtualFile) ?: return@readModel emptyList()

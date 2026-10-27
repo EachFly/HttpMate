@@ -87,5 +87,89 @@ class FallbackApiParserTest {
         """))
     }
 
+    @Test
+    fun constantsAndConcatenationsAreEvaluatedAsWholeExpressions() {
+        assertEquals(setOf("GET" to "/api/users", "GET" to "/api/admin"), routes("""
+            class Controller {
+                static final String BASE = "/api";
+                static final String USERS = BASE + "/users";
+                @GetMapping(path = {USERS, (BASE + "/admin")}) public void users() {}
+                @GetMapping(MISSING) public void unresolved() {}
+                @GetMapping(MISSING + "/partial") public void partial() {}
+            }
+        """))
+    }
+
+    @Test
+    fun kotlinConstantsAndQualifiedConstantsRespectTheirOwners() {
+        assertEquals(setOf("GET" to "/top/users", "GET" to "/first", "GET" to "/first/bare",
+            "GET" to "/first/short", "GET" to "/second", "GET" to "/routes/item"), routes("""
+            const val TOP = "/top"
+            object Routes { const val ROOT = "/routes" }
+            class First {
+                companion object { const val API = "/first" }
+                @GetMapping(First.Companion.API) fun first() {}
+                @GetMapping(API + "/bare") fun bare() {}
+                @GetMapping(First.API + "/short") fun short() {}
+                @GetMapping(TOP + "/users") fun users() {}
+            }
+            class Second {
+                const val API = "/second"
+                @GetMapping(API) fun second() {}
+                @GetMapping(Routes.ROOT + "/item") fun item() {}
+            }
+        """))
+    }
+
+    @Test
+    fun constantsDoNotLeakAcrossControllersAndCyclesAreIgnored() {
+        assertEquals(setOf("GET" to "/first", "GET" to "/second"), routes("""
+            class First {
+                static final String API = "/first";
+                @GetMapping(API) public void first() {}
+            }
+            class Second {
+                static final String API = "/second";
+                static final String CYCLE = CYCLE;
+                @GetMapping(API) public void second() {}
+                @GetMapping(CYCLE) public void cycle() {}
+            }
+            class Third { @GetMapping(API) public void missing() {} }
+        """))
+    }
+
+    @Test
+    fun constructorAnnotationsDoNotHideKotlinClassBodies() {
+        assertEquals(setOf("GET" to "/api/users", "GET" to "/next"), routes("""
+            class Empty
+            @RequestMapping("/api")
+            class Controller @Inject @Other("ignored") private constructor(val service: Service) {
+                @GetMapping("/users") fun users() {}
+            }
+            @RequestMapping("/next") class Next { @GetMapping fun next() {} }
+        """))
+    }
+
+    @Test
+    fun classHttpMethodsAreInheritedAndCombinedWithMethodDeclarations() {
+        assertEquals(setOf("POST" to "/api/inherited", "POST" to "/api/both", "GET" to "/api/both"), routes("""
+            @RequestMapping(value = "/api", method = RequestMethod.POST)
+            class Controller {
+                @RequestMapping("/inherited") public void inherited() {}
+                @GetMapping("/both") public void both() {}
+            }
+        """))
+    }
+
+    @Test
+    fun literalStructuralCharactersRemainPaths() {
+        assertEquals(setOf("GET" to "/{", "GET" to "/+"), routes("""
+            class Controller {
+                @GetMapping("{") public void brace() {}
+                @GetMapping("+") public void plus() {}
+            }
+        """))
+    }
+
     private fun routes(text: String) = FallbackApiParser.parse(text).map { it.method to it.path }.toSet()
 }

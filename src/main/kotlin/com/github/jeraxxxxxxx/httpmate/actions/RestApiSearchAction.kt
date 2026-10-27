@@ -7,7 +7,6 @@ import com.github.jeraxxxxxxx.httpmate.ui.RestApiSearchDialog
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
-import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.progress.ProcessCanceledException
@@ -82,7 +81,7 @@ class RestApiSearchAction : AnAction() {
                         throw ex
                     } catch (ex: Exception) {
                         thisLogger().error("Error during REST API scan", ex)
-                        ApplicationManager.getApplication().invokeLater {
+                        ProjectBackgroundWork.later(project, indicator) {
                             Messages.showErrorDialog(
                                 project,
                                 HttpMateBundle.message("rest.search.error.message", ex.message ?: "Unknown error"),
@@ -92,7 +91,7 @@ class RestApiSearchAction : AnAction() {
                         return
                     }
 
-                    ApplicationManager.getApplication().invokeLater {
+                    ProjectBackgroundWork.later(project, indicator) {
                         RestApiSearchDialog(project, items).show()
                     }
                 }
