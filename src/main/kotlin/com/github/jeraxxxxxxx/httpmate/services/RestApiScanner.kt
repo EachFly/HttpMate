@@ -35,15 +35,17 @@ class RestApiScanner(private val project: Project) {
      * @return REST API 列表
      */
     fun collectApiCandidates(): List<SmartPsiElementPointer<PsiMethod>> {
-        val scope = GlobalSearchScope.projectScope(project)
+        val endpointScope = GlobalSearchScope.projectScope(project)
+        // Annotation definitions usually live in dependency JARs; endpoints must stay project-only.
+        val annotationScope = GlobalSearchScope.allScope(project)
         val javaPsiFacade = JavaPsiFacade.getInstance(project)
         val processedMethods = mutableSetOf<PsiMethod>()
         val pointers = mutableListOf<SmartPsiElementPointer<PsiMethod>>()
 
         for (annotationName in RestAnnotations.ALL) {
             try {
-                val annotationClass = javaPsiFacade.findClass(annotationName, scope) ?: continue
-                val annotatedElements = AnnotatedElementsSearch.searchPsiMethods(annotationClass, scope)
+                val annotationClass = javaPsiFacade.findClass(annotationName, annotationScope) ?: continue
+                val annotatedElements = AnnotatedElementsSearch.searchPsiMethods(annotationClass, endpointScope)
 
                 annotatedElements.forEach(Processor { method ->
                     ProgressManager.checkCanceled()

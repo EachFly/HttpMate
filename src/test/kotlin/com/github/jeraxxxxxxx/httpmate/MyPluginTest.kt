@@ -15,6 +15,7 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
 import com.intellij.testFramework.TestDataPath
 import com.intellij.testFramework.PlatformTestUtil
+import com.intellij.testFramework.PsiTestUtil
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import com.intellij.util.PsiErrorElementUtil
 import com.intellij.psi.PsiClassOwner
@@ -22,14 +23,20 @@ import com.intellij.psi.PsiMethod
 import com.intellij.psi.PsiTypes
 import com.intellij.psi.SmartPointerManager
 import com.intellij.psi.JavaPsiFacade
+import com.intellij.psi.PsiCompiledElement
+import com.intellij.psi.search.GlobalSearchScope
+import com.intellij.openapi.Disposable
 import com.intellij.openapi.progress.EmptyProgressIndicator
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.util.io.FileUtil
+import com.intellij.openapi.util.Disposer
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.psi.xml.XmlFile
 import java.util.Locale
 import java.util.concurrent.Callable
 import java.io.File
+import org.jetbrains.org.objectweb.asm.ClassWriter
+import org.jetbrains.org.objectweb.asm.Opcodes
 
 @TestDataPath("\$CONTENT_ROOT/src/test/testData")
 class MyPluginTest : BasePlatformTestCase() {
@@ -546,6 +553,78 @@ class MyPluginTest : BasePlatformTestCase() {
             java.time.ZonedDateTime.parse(value("java.time.ZonedDateTime"))
             java.time.OffsetDateTime.parse(value("java.time.OffsetDateTime"))
             java.time.Instant.parse(value("java.time.Instant"))
+        }
+    }
+
+    fun testBinaryDependencyAnnotationsDoNotExpandEndpointSearchScope() {
+        val directory = FileUtil.createTempDirectory("httpmate-binary-dependency", null, true)
+        Disposer.register(testRootDisposable, Disposable { FileUtil.delete(directory) })
+        fun writeClass(name: String, writer: ClassWriter) {
+            writer.visitEnd()
+            File(directory, "classes/$name.class").apply {
+                parentFile.mkdirs()
+                writeBytes(writer.toByteArray())
+            }
+        }
+        val annotationPath = "org/springframework/web/bind/annotation/GetMapping"
+        val annotationWriter = ClassWriter(0)
+        annotationWriter.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC or Opcodes.ACC_ABSTRACT or
+            Opcodes.ACC_INTERFACE or Opcodes.ACC_ANNOTATION, annotationPath, null,
+            "java/lang/Object", arrayOf("java/lang/annotation/Annotation"))
+        annotationWriter.visitAnnotation("Ljava/lang/annotation/Retention;", true).apply {
+            visitEnum("value", "Ljava/lang/annotation/RetentionPolicy;", "RUNTIME")
+            visitEnd()
+        }
+        for (name in listOf("value", "path")) {
+            annotationWriter.visitMethod(Opcodes.ACC_PUBLIC or Opcodes.ACC_ABSTRACT, name,
+                "()[Ljava/lang/String;", null, null).apply {
+                visitAnnotationDefault().apply {
+                    visitArray(null).visitEnd()
+                    visitEnd()
+                }
+                visitEnd()
+            }
+        }
+        writeClass(annotationPath, annotationWriter)
+        val controllerWriter = ClassWriter(0)
+        controllerWriter.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC or Opcodes.ACC_ABSTRACT,
+            "dependency/LibraryController", null, "java/lang/Object", null)
+        controllerWriter.visitMethod(Opcodes.ACC_PUBLIC or Opcodes.ACC_ABSTRACT, "handle", "()V", null, null).apply {
+            visitAnnotation("L$annotationPath;", true).apply {
+                visitArray("value").apply {
+                    visit(null, "/library-only")
+                    visitEnd()
+                }
+                visitEnd()
+            }
+            visitEnd()
+        }
+        writeClass("dependency/LibraryController", controllerWriter)
+
+        // No source files exist: the dependency consists exclusively of compiled classes.
+        PsiTestUtil.addLibrary(testRootDisposable, module, "binary-rest-dependency", directory.path, "classes")
+        myFixture.addFileToProject("src/example/ProjectController.java", """
+            package example;
+            import org.springframework.web.bind.annotation.GetMapping;
+            public class ProjectController {
+                @GetMapping("/project-only") public void handle() {}
+            }
+        """.trimIndent())
+
+        ReadAction.run<RuntimeException> {
+            val facade = JavaPsiFacade.getInstance(project)
+            val annotationName = "org.springframework.web.bind.annotation.GetMapping"
+            val annotationClass = facade.findClass(annotationName, GlobalSearchScope.allScope(project))
+            assertTrue("Annotation must resolve directly from compiled classes", annotationClass is PsiCompiledElement)
+            assertNull(facade.findClass(annotationName, GlobalSearchScope.projectScope(project)))
+            val libraryClass = facade.findClass("dependency.LibraryController", GlobalSearchScope.allScope(project))
+            assertTrue(libraryClass!!.findMethodsByName("handle", false).single().hasAnnotation(annotationName))
+
+            val scanner = RestApiScanner(project)
+            val candidates = scanner.collectApiCandidates()
+            val items = scanner.scanBatch(candidates)
+            assertEquals(listOf("GET" to "/project-only"), items.map { it.method to it.path })
+            assertTrue(candidates.all { GlobalSearchScope.projectScope(project).contains(it.virtualFile!!) })
         }
     }
 
