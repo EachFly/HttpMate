@@ -213,6 +213,17 @@ HttpMate/
 └─ CHANGELOG.md
 ```
 
+## 发布草稿说明 (Release Drafts)
+
+构建流程不会删除其他 Release 草稿，只创建或更新当前版本的自动草稿。自动草稿使用
+`<!-- httpmate:changelog:start -->` 和 `<!-- httpmate:changelog:end -->` 标记 Changelog 生成区块；
+可以在区块前后维护手工说明，这些文字在后续构建中会保留。区块内的内容会随 Changelog 更新。
+
+同版本的正式 Release、手工创建的草稿，以及没有上述标记的旧草稿都会保留并提示跳过，不会自动接管。
+正式版和从草稿发布的预发行版均通过 `release.published` 触发插件发布。
+
+发布脚本的本地回归测试：`node --test .github/scripts/release-draft.test.mjs`（只模拟调用，不连接 GitHub）。
+
 ## 🤝 贡献与许可 (Contributing & License)
 
 欢迎提交 Issue 与 PR，一般流程如下：

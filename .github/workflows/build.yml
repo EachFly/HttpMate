@@ -108,6 +108,9 @@ jobs:
           cache-read-only: true
 
       # Run tests
+      - name: Test Release Draft Handling
+        run: node --test .github/scripts/release-draft.test.mjs
+
       - name: Run Tests
         run: ./gradlew check
 
@@ -239,17 +242,8 @@ jobs:
       - name: Build Plugin
         run: ./gradlew buildPlugin
 
-      # Remove old release drafts by using the curl request for the available releases with a draft flag
-      - name: Remove Old Release Drafts
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh api repos/{owner}/{repo}/releases \
-            --jq '.[] | select(.draft == true) | .id' \
-            | xargs -I '{}' gh api -X DELETE repos/{owner}/{repo}/releases/{}
-
-      # Create a new release draft which is not publicly visible and requires manual acceptance
-      - name: Create Release Draft
+      # Preserve manual drafts and notes; only update this version's marked automatic draft.
+      - name: Create or Update Release Draft
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -265,9 +259,5 @@ jobs:
             --console=plain \
             --output-file="$RELEASE_NOTE"
           
-          gh release create "$VERSION" \
-            --draft \
-            --title "$VERSION" \
-            --notes-file "$RELEASE_NOTE" \
-            ./build/distributions/*.zip
+          node .github/scripts/release-draft.mjs "$VERSION" "$RELEASE_NOTE"
 
