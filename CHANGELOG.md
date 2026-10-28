@@ -1,5 +1,49 @@
 # HttpMate Changelog
 
+## [1.2.8] - 2026-10-28
+
+### Fixed / 修复
+
+- Resolved REST annotation definitions from dependency classes, including binary-only libraries, while keeping endpoint search results limited to the project.
+- 支持从依赖库（包括仅含 class 文件的依赖）查找 REST 注解定义，接口搜索结果仍限定在当前项目内。
+- Evaluated constant references and concatenated paths in fallback scans without inventing root paths for unresolved expressions; retained Kotlin controllers with annotated primary constructors.
+- 后备扫描支持常量引用与路径拼接，无法解析时不再误报根路径，并保留主构造器带注解的 Kotlin 控制器。
+- Combined class-level and method-level Spring HTTP methods and retained identical endpoints declared in different files.
+- 合并 Spring 类级与方法级 HTTP 请求方法，并保留不同文件中声明的同路径接口。
+- Included source-file identity in generated filenames to prevent collisions between same-named classes across modules or source roots.
+- 生成文件名加入源文件身份，避免跨模块或源码根目录的同名类互相覆盖。
+- Resolved collection implementations and inherited generic arguments, preferred subclass fields over hidden superclass fields, and preserved scalar values and container shapes at recursion limits.
+- 按继承关系识别集合实现类与泛型实参，同名字段优先使用子类定义，并在递归截断时保留基本值和容器结构。
+- Used type-specific temporal JSON formats, including ISO formats for java.time values and date-only or time-only values where appropriate.
+- JSON 日期时间示例按类型生成，java.time 类型采用对应 ISO 格式，日期与时间类型不再混入无关部分。
+- Generated response documentation from the body of ResponseEntity/HttpEntity, aligned field tables with inherited generic types, and displayed explicit NotNull/NotBlank/NotEmpty field constraints.
+- 响应文档展开 ResponseEntity/HttpEntity 的实际响应体，字段表格同步继承与泛型类型，并展示字段上的显式 NotNull/NotBlank/NotEmpty 必填约束。
+- Replaced the buffered file-read append call with appendRange to address the reported Qodana inspection.
+- 缓冲文件读取改用 appendRange，修复对应 Qodana 检查问题。
+
+### Improved / 优化
+
+- Made JSON and documentation generation use cancellable, write-priority reads; kept saving within the original background task and guarded queued UI work against cancellation and project disposal.
+- JSON 与文档生成改用可取消、可为写操作让路的读任务；保存操作保留在原后台任务中，界面回调检查取消状态与项目生命周期。
+- Saved generated files through temporary files and replacement to avoid partially overwriting existing output when generation is canceled.
+- 生成文件通过临时文件写入后替换，避免取消时将已有输出写成不完整内容。
+
+### Release Automation / 发布自动化
+
+- Switched release publication to the published event so releases and pre-releases published from drafts can trigger plugin publication.
+- 发布流程改为监听 published 事件，使从草稿发布的正式版与预发行版均可触发插件发布。
+- Replaced broad draft deletion with current-version automatic-draft updates using managed changelog markers; preserved surrounding manual notes and skipped manual or unmarked drafts and published versions.
+- 移除无差别删除草稿的逻辑，仅更新当前版本带标记的自动草稿；保留生成区块外的手工说明，并跳过手工或无标记草稿及已发布版本。
+- Allowed release asset uploads to replace same-named files instead of failing on duplicate draft attachments.
+- Release 附件上传支持替换同名文件，避免因草稿已有附件而直接失败。
+
+### Tests / 测试
+
+- Added regression coverage for binary dependency annotations, fallback constants and Kotlin constructors, generated filenames, temporal formats, collection inheritance, response wrappers, hidden fields, recursion limits, validation flags, and cancellation.
+- 新增二进制依赖注解、后备扫描常量与 Kotlin 构造器、生成文件名、日期格式、集合继承、响应包装器、同名字段、递归截断、必填标记及取消行为的回归测试。
+- Added isolated release-draft script tests covering ownership, pagination, manual-note preservation, and safe skipping without calling GitHub.
+- 新增不连接 GitHub 的草稿脚本测试，覆盖归属判断、分页、手工说明保留与安全跳过。
+
 ## [1.2.7] - 2026-10-26
 
 ### Fixed / 修复
