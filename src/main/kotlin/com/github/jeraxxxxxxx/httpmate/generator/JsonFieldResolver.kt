@@ -1,6 +1,7 @@
 package com.github.jeraxxxxxxx.httpmate.generator
 
 import com.intellij.psi.PsiClassType
+import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiModifier
 import com.intellij.psi.PsiField
 import com.intellij.openapi.progress.ProgressManager
@@ -16,12 +17,20 @@ internal object JsonFieldResolver {
     fun resolve(type: PsiType): List<Field> {
         val resolved = (type as? PsiClassType)?.resolveGenerics() ?: return emptyList()
         val psiClass = resolved.element ?: return emptyList()
-        return psiClass.allFields.filterNot { it.hasModifierProperty(PsiModifier.STATIC) }.map { field ->
+        val fields = linkedMapOf<String, Field>()
+        val visited = mutableSetOf<PsiClass>()
+        var owner: PsiClass? = psiClass
+        while (owner != null && visited.add(owner)) {
             ProgressManager.checkCanceled()
-            val owner = field.containingClass ?: psiClass
             val substitutor = TypeConversionUtil.getSuperClassSubstitutor(owner, psiClass, resolved.substitutor)
-            val inheritedType = substitutor.substitute(field.type) ?: field.type
-            Field(field, resolved.substitutor.substitute(inheritedType) ?: inheritedType)
+            for (field in owner.fields) {
+                ProgressManager.checkCanceled()
+                if (field.hasModifierProperty(PsiModifier.STATIC) || field.name in fields) continue
+                val inheritedType = substitutor.substitute(field.type) ?: field.type
+                fields[field.name] = Field(field, resolved.substitutor.substitute(inheritedType) ?: inheritedType)
+            }
+            owner = owner.superClass
         }
+        return fields.values.toList()
     }
 }

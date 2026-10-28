@@ -2,8 +2,6 @@ package com.github.jeraxxxxxxx.httpmate.generator
 
 import com.github.jeraxxxxxxx.httpmate.constants.AppConstants
 import com.intellij.openapi.progress.ProgressManager
-import com.intellij.psi.PsiArrayType
-import com.intellij.psi.PsiClassType
 import com.intellij.psi.PsiEnumConstant
 import com.intellij.psi.PsiPrimitiveType
 import com.intellij.psi.PsiType
@@ -22,7 +20,6 @@ class MockJsonGenerator : JsonGenerator {
 
     override fun generate(type: PsiType, depth: Int): String {
         ProgressManager.checkCanceled()
-        if (depth > AppConstants.MAX_JSON_RECURSION_DEPTH) return "{}"
 
         if (type is PsiPrimitiveType) {
             return when (type) {
@@ -60,9 +57,10 @@ class MockJsonGenerator : JsonGenerator {
             ?.let { return it }
 
         // Handle Collections
-        if (canonicalText.startsWith("java.util.List") || canonicalText.startsWith("java.util.Set") || type is PsiArrayType) {
-            val elementType =
-                if (type is PsiArrayType) type.componentType else (type as? PsiClassType)?.parameters?.firstOrNull()
+        val container = JsonTypeResolver.container(type)
+        if (container?.kind == JsonTypeResolver.Kind.SEQUENCE) {
+            if (depth > AppConstants.MAX_JSON_RECURSION_DEPTH) return "[]"
+            val elementType = container.arguments.firstOrNull()
             if (elementType != null) {
                 val sb = StringBuilder()
                 sb.append("[\n")
@@ -81,10 +79,11 @@ class MockJsonGenerator : JsonGenerator {
             return "[]"
         }
 
-        if (canonicalText.startsWith("java.util.Map")) {
+        if (container?.kind == JsonTypeResolver.Kind.MAP) {
+            if (depth > AppConstants.MAX_JSON_RECURSION_DEPTH) return "{}"
             // Simple map mock: {"key1": value, "key2": value}
-            val keyType = (type as? PsiClassType)?.parameters?.getOrNull(0)
-            val valueType = (type as? PsiClassType)?.parameters?.getOrNull(1)
+            val keyType = container.arguments.getOrNull(0)
+            val valueType = container.arguments.getOrNull(1)
 
             if (keyType != null && valueType != null && keyType.canonicalText == "java.lang.String") {
                 val sb = StringBuilder()
@@ -110,6 +109,8 @@ class MockJsonGenerator : JsonGenerator {
             val fields = psiClass.fields.filterIsInstance<PsiEnumConstant>()
             return if (fields.isNotEmpty()) "\"${fields.random().name}\"" else "\"\""
         }
+
+        if (depth > AppConstants.MAX_JSON_RECURSION_DEPTH) return "{}"
 
         val sb = StringBuilder()
         sb.append("{\n")

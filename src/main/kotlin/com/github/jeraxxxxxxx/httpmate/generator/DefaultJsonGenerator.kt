@@ -2,7 +2,6 @@ package com.github.jeraxxxxxxx.httpmate.generator
 
 import com.github.jeraxxxxxxx.httpmate.constants.AppConstants
 import com.intellij.openapi.progress.ProgressManager
-import com.intellij.psi.PsiArrayType
 import com.intellij.psi.PsiEnumConstant
 import com.intellij.psi.PsiPrimitiveType
 import com.intellij.psi.PsiType
@@ -12,7 +11,6 @@ import com.intellij.psi.util.PsiTypesUtil
 class DefaultJsonGenerator : JsonGenerator {
     override fun generate(type: PsiType, depth: Int): String {
         ProgressManager.checkCanceled()
-        if (depth > AppConstants.MAX_JSON_RECURSION_DEPTH) return "{}" // Prevent infinite recursion
 
         if (type is PsiPrimitiveType) {
             return when (type) {
@@ -39,14 +37,18 @@ class DefaultJsonGenerator : JsonGenerator {
         // Handle Date and Time
         JsonTemporalValues.generate(canonicalText)?.let { return it }
 
-        if (canonicalText.startsWith("java.util.List") || canonicalText.startsWith("java.util.Set") || type is PsiArrayType) return "[]"
-        if (canonicalText.startsWith("java.util.Map")) return "{}"
+        JsonTypeResolver.container(type)?.let {
+            return if (it.kind == JsonTypeResolver.Kind.SEQUENCE) "[]" else "{}"
+        }
 
         val psiClass = PsiTypesUtil.getPsiClass(type) ?: return "{}"
         if (psiClass.isEnum) {
             val fields = psiClass.fields.filterIsInstance<PsiEnumConstant>()
             return if (fields.isNotEmpty()) "\"${fields[0].name}\"" else "\"\""
         }
+
+        // Limit only recursive object expansion, never scalar values or container shapes.
+        if (depth > AppConstants.MAX_JSON_RECURSION_DEPTH) return "{}"
 
         val sb = StringBuilder()
         sb.append("{\n")

@@ -3,6 +3,7 @@ package com.github.jeraxxxxxxx.httpmate.doc
 import com.github.jeraxxxxxxx.httpmate.constants.AppConstants
 import com.github.jeraxxxxxxx.httpmate.generator.MockJsonGenerator
 import com.github.jeraxxxxxxx.httpmate.generator.JsonFieldResolver
+import com.github.jeraxxxxxxx.httpmate.generator.JsonTypeResolver
 import com.github.jeraxxxxxxx.httpmate.services.SpringRequestMethods
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.psi.JavaPsiFacade
@@ -30,7 +31,7 @@ class DocGenerator {
         val methodName = method.name
         val (httpMethod, path) = getApiInfo(method)
         val params = method.parameterList.parameters
-        val returnType = method.returnType
+        val returnType = responseBodyType(method)
 
         return buildString {
             append("# $className - $methodName\n\n")
@@ -77,6 +78,15 @@ class DocGenerator {
         }
     }
 
+    private fun responseBodyType(method: PsiMethod): PsiType? {
+        val declared = method.returnType ?: return null
+        val wrapper = listOf("org.springframework.http.ResponseEntity", "org.springframework.http.HttpEntity")
+            .firstOrNull { JsonTypeResolver.isType(declared, it) }
+        val body = if (wrapper == null) declared else JsonTypeResolver.argument(declared, wrapper, 0)
+            ?: PsiType.getJavaLangObject(method.manager, method.resolveScope)
+        return body.takeUnless { it == PsiTypes.voidType() || it.canonicalText == "java.lang.Void" }
+    }
+
     private fun StringBuilder.appendRequestParameters(params: Array<PsiParameter>) {
         if (params.isEmpty()) {
             append("无请求参数\n")
@@ -100,6 +110,8 @@ class DocGenerator {
             val psiClass = PsiTypesUtil.getPsiClass(type)
             if (shouldExpand(psiClass, type)) {
                 nestedTypes += type
+            } else {
+                collectContainerTypes(type, nestedTypes)
             }
         }
         append('\n')
@@ -127,7 +139,7 @@ class DocGenerator {
             JsonFieldResolver.resolve(type).forEach { field ->
                 ProgressManager.checkCanceled()
                 append("| ${field.name} | ${field.type.presentableText} | ${extractFieldComment(field.declaration)} |\n")
-                if (shouldExpand(PsiTypesUtil.getPsiClass(field.type), field.type)) nestedTypes += field.type
+                collectNestedTypes(field.type, nestedTypes)
             }
             append('\n')
             appendNestedTypeTables(nestedTypes)
@@ -135,6 +147,12 @@ class DocGenerator {
         }
 
         append("| result | ${type.presentableText} | |\n")
+        val nestedTypes = linkedSetOf<PsiType>()
+        collectContainerTypes(type, nestedTypes)
+        if (nestedTypes.isNotEmpty()) {
+            append('\n')
+            appendNestedTypeTables(nestedTypes)
+        }
     }
 
     private fun StringBuilder.appendNestedTypeTable(
@@ -151,19 +169,32 @@ class DocGenerator {
         JsonFieldResolver.resolve(type).forEach { field ->
             ProgressManager.checkCanceled()
             append(
-                "| ${field.name} | ${field.type.presentableText} | 否 | ${extractFieldLengthConstraint(field.declaration)} | ${
+                "| ${field.name} | ${field.type.presentableText} | ${isRequired(field.declaration)} | ${extractFieldLengthConstraint(field.declaration)} | ${
                     extractFieldComment(
                         field.declaration
                     )
                 } |\n"
             )
 
-            val nestedClass = PsiTypesUtil.getPsiClass(field.type)
-            if (shouldExpand(nestedClass, field.type)) {
-                nestedTypes += field.type
-            }
+            collectNestedTypes(field.type, nestedTypes)
         }
         append('\n')
+    }
+
+    private fun collectNestedTypes(type: PsiType, nestedTypes: MutableSet<PsiType>) {
+        if (shouldExpand(PsiTypesUtil.getPsiClass(type), type)) nestedTypes += type
+        else collectContainerTypes(type, nestedTypes)
+    }
+
+    private fun collectContainerTypes(type: PsiType, nestedTypes: MutableSet<PsiType>, depth: Int = 0) {
+        if (depth >= AppConstants.MAX_NESTED_TYPE_DEPTH) return
+        val container = JsonTypeResolver.container(type) ?: return
+        val values = if (container.kind == JsonTypeResolver.Kind.MAP) container.arguments.drop(1) else container.arguments
+        values.filterNotNull().forEach {
+            ProgressManager.checkCanceled()
+            if (shouldExpand(PsiTypesUtil.getPsiClass(it), it)) nestedTypes += it
+            else collectContainerTypes(it, nestedTypes, depth + 1)
+        }
     }
 
     private fun getApiInfo(method: PsiMethod): Pair<String, String> {
@@ -297,6 +328,9 @@ class DocGenerator {
         return if (defaultValue != null && defaultValue != DEFAULT_NONE) "否" else "是"
     }
 
+    private fun isRequired(field: PsiField): String =
+        if (field.annotations.any { it.qualifiedName in REQUIRED_FIELD_ANNOTATIONS }) "是" else "否"
+
     private companion object {
         // Spring's ValueConstants.DEFAULT_NONE distinguishes no default from an explicit empty default.
         const val DEFAULT_NONE = "\n\t\t\n\t\t\n\uE000\uE001\uE002\n\t\t\t\t\n"
@@ -308,11 +342,15 @@ class DocGenerator {
             "org.jetbrains.annotations.Nullable", "javax.annotation.Nullable", "jakarta.annotation.Nullable",
             "org.springframework.lang.Nullable", "org.jspecify.annotations.Nullable"
         )
+        val REQUIRED_FIELD_ANNOTATIONS = setOf("javax.validation.constraints", "jakarta.validation.constraints")
+            .flatMap { namespace -> listOf("NotNull", "NotBlank", "NotEmpty").map { "$namespace.$it" } }
+            .toSet() + setOf("org.hibernate.validator.constraints.NotBlank", "org.hibernate.validator.constraints.NotEmpty")
     }
 
     private fun shouldExpand(psiClass: PsiClass?, type: PsiType): Boolean {
         return psiClass != null &&
                 !psiClass.isEnum &&
+                JsonTypeResolver.container(type) == null &&
                 !type.canonicalText.startsWith("java.") &&
                 !isSimpleType(type)
     }
