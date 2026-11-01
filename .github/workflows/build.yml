@@ -109,7 +109,7 @@ jobs:
 
       # Run tests
       - name: Test Release Draft Handling
-        run: node --test .github/scripts/release-draft.test.mjs
+        run: node --test .github/scripts/*.test.mjs
 
       - name: Run Tests
         run: ./gradlew check
@@ -217,6 +217,9 @@ jobs:
     if: github.event_name != 'pull_request'
     needs: [ build, test, inspectCode, verify ]
     runs-on: ubuntu-latest
+    concurrency:
+      group: httpmate-release-drafts
+      cancel-in-progress: false
     permissions:
       contents: write
     steps:
@@ -242,7 +245,7 @@ jobs:
       - name: Build Plugin
         run: ./gradlew buildPlugin
 
-      # Preserve manual drafts and notes; only update this version's marked automatic draft.
+      # Refresh automatic drafts; leave published releases and manual drafts untouched.
       - name: Create or Update Release Draft
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
