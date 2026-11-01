@@ -8,6 +8,10 @@ import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiMethod
 import com.intellij.psi.util.PsiTreeUtil
+import org.jetbrains.uast.UClass
+import org.jetbrains.uast.UFile
+import org.jetbrains.uast.UMethod
+import org.jetbrains.uast.toUElementOfType
 
 object ActionContextResolver {
 
@@ -30,15 +34,17 @@ object ActionContextResolver {
     }
 
     internal fun findPsiClass(element: PsiElement?): PsiClass? {
-        return PsiTreeUtil.getParentOfType(element, PsiClass::class.java, false) ?: (element as? PsiClass)
+        return PsiTreeUtil.getParentOfType(element, PsiClass::class.java, false)
+            ?: generateSequence(element) { it.parent }.mapNotNull { it.toUElementOfType<UClass>()?.javaPsi }.firstOrNull()
     }
 
     internal fun findPsiMethod(element: PsiElement?): PsiMethod? {
-        return PsiTreeUtil.getParentOfType(element, PsiMethod::class.java, false) ?: (element as? PsiMethod)
+        return PsiTreeUtil.getParentOfType(element, PsiMethod::class.java, false)
+            ?: generateSequence(element) { it.parent }.mapNotNull { it.toUElementOfType<UMethod>()?.javaPsi }.firstOrNull()
     }
 
     private fun findSingleTopLevelClass(psiFile: PsiFile?): PsiClass? {
-        val classOwner = psiFile as? PsiClassOwner ?: return null
-        return classOwner.classes.singleOrNull()
+        return (psiFile as? PsiClassOwner)?.classes?.singleOrNull()
+            ?: psiFile?.toUElementOfType<UFile>()?.classes?.singleOrNull()?.javaPsi
     }
 }

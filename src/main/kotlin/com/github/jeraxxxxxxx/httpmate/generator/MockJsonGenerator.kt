@@ -28,11 +28,13 @@ class MockJsonGenerator : JsonGenerator {
                 PsiTypes.longType() -> random.nextLong(0, 10000).toString()
                 PsiTypes.floatType() -> String.format(Locale.ROOT, "%.2f", random.nextDouble(0.0, 100.0))
                 PsiTypes.doubleType() -> String.format(Locale.ROOT, "%.2f", random.nextDouble(0.0, 100.0))
+                PsiTypes.charType() -> "\"${('a'..'z').random()}\""
                 else -> "null"
             }
         }
 
         val canonicalText = type.canonicalText
+        if (canonicalText == "java.lang.Character") return "\"${('a'..'z').random()}\""
         // Handle String
         if (canonicalText == "java.lang.String") {
             val mockStrings = listOf("lorem", "ipsum", "dolor", "sit", "amet", "test", "mock", "data")

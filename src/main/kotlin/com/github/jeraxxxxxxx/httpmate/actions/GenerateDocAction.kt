@@ -1,7 +1,7 @@
 package com.github.jeraxxxxxxx.httpmate.actions
 
 import com.github.jeraxxxxxxx.httpmate.HttpMateBundle
-import com.github.jeraxxxxxxx.httpmate.constants.RestAnnotations
+import com.github.jeraxxxxxxx.httpmate.services.RestMappingResolver
 import com.github.jeraxxxxxxx.httpmate.doc.DocGenerator
 import com.github.jeraxxxxxxx.httpmate.services.HttpMateProjectService
 import com.intellij.openapi.actionSystem.ActionUpdateThread
@@ -191,9 +191,7 @@ class GenerateDocAction : AnAction() {
     }
 
     private fun hasRestAnnotation(method: PsiMethod): Boolean {
-        return method.annotations.any { annotation ->
-            RestAnnotations.matches(annotation)
-        }
+        return RestMappingResolver.method(method) != null
     }
 
     private fun saveDocToFile(

@@ -95,6 +95,7 @@ class MyPluginTest : BasePlatformTestCase() {
             import javax.ws.rs.Path;
 
             @RequestMapping("/api/users")
+            @Path("/api/users")
             public class SampleController {
               @GetMapping("/search")
               public UserResponse search(@RequestParam(required = false) String keyword) {
@@ -266,7 +267,7 @@ class MyPluginTest : BasePlatformTestCase() {
         assertTrue(content.contains("## 接口信息"))
         assertTrue(content.contains("| 接口名称 | detail |"))
         assertTrue(content.contains("| 请求方式 | GET |"))
-        assertTrue(content.contains("| 接口路径 | `/api/users/detail` |"))
+        assertTrue(content.contains("| 接口路径 | /api/users/detail |"))
         assertTrue(content.contains("| userId | String | 否 |"))
         assertTrue(content.contains("## 请求示例"))
         assertTrue(content.contains("## 响应示例"))
@@ -418,7 +419,7 @@ class MyPluginTest : BasePlatformTestCase() {
             assertTrue("Expected optional parameter: $name\n$markdown", markdown.contains("| $name | String | 否 |"))
         }
         assertTrue(markdown.contains("| required | String | 是 |"))
-        assertTrue(markdown.contains("| wrapped | Optional<String> | 否 |"))
+        assertTrue(markdown.contains("| wrapped | Optional&lt;String&gt; | 否 |"))
     }
 
     fun testIdenticalEndpointsAndClassNamesInDifferentSourceRootsAreNotCollapsed() {
@@ -481,8 +482,8 @@ class MyPluginTest : BasePlatformTestCase() {
         ReadAction.run<RuntimeException> {
             val method = (file as PsiClassOwner).classes.last().methods.single()
             val markdown = DocGenerator().generate(method)
-            assertTrue(markdown.contains("**Envelope<User>**"))
-            assertTrue(markdown.contains("**Envelope<Other>**"))
+            assertTrue(markdown.contains("**Envelope&lt;User&gt;**"))
+            assertTrue(markdown.contains("**Envelope&lt;Other&gt;**"))
             assertTrue(markdown.contains("| data | User |"))
             assertTrue(markdown.contains("| data | Other |"))
             assertTrue(markdown.contains("| inherited | String |"))

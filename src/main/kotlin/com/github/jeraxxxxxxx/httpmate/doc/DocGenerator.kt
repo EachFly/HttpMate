@@ -1,19 +1,15 @@
 package com.github.jeraxxxxxxx.httpmate.doc
 
 import com.github.jeraxxxxxxx.httpmate.constants.AppConstants
-import com.github.jeraxxxxxxx.httpmate.generator.MockJsonGenerator
 import com.github.jeraxxxxxxx.httpmate.generator.JsonFieldResolver
 import com.github.jeraxxxxxxx.httpmate.generator.JsonTypeResolver
-import com.github.jeraxxxxxxx.httpmate.services.SpringRequestMethods
+import com.github.jeraxxxxxxx.httpmate.generator.MockJsonGenerator
+import com.github.jeraxxxxxxx.httpmate.services.RestMappingResolver
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.PsiAnnotation
-import com.intellij.psi.PsiAnnotationMemberValue
-import com.intellij.psi.PsiArrayInitializerMemberValue
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiComment
-import com.intellij.psi.PsiLiteralExpression
-import com.intellij.psi.PsiReferenceExpression
 import com.intellij.psi.PsiField
 import com.intellij.psi.PsiMethod
 import com.intellij.psi.PsiParameter
@@ -24,58 +20,43 @@ import com.intellij.psi.util.PsiTypesUtil
 
 class DocGenerator {
     private val mockJsonGenerator = MockJsonGenerator()
+    private data class DocType(val type: PsiType, val groups: Set<String>)
 
     fun generate(method: PsiMethod): String {
         ProgressManager.checkCanceled()
         val className = method.containingClass?.name ?: "Unknown"
-        val methodName = method.name
-        val (httpMethod, path) = getApiInfo(method)
+        val mapping = RestMappingResolver.method(method)
+        val paths = mapping?.let { RestMappingResolver.fullPaths(method, it) }.orEmpty()
         val params = method.parameterList.parameters
         val returnType = responseBodyType(method)
-
         return buildString {
-            append("# $className - $methodName\n\n")
-            append("## 接口信息\n\n")
-            append("| 属性 | 值 |\n")
-            append("| --- | --- |\n")
-            append("| 接口名称 | $methodName |\n")
-            append("| 请求方式 | $httpMethod |\n")
-            append("| 接口路径 | `$path` |\n\n")
-
-            append("## 请求参数\n\n")
+            append("# ${cell(className)} - ${cell(method.name)}\n\n## 接口信息\n\n")
+            append("| 属性 | 值 |\n| --- | --- |\n")
+            row("接口名称", method.name)
+            row("请求方式", mapping?.methods?.ifEmpty { listOf("ALL") }?.joinToString(", ") ?: "无法识别")
+            row("接口路径", paths.joinToString(", ").ifEmpty { "无法解析（未生成假定路径）" })
+            append("\n## 请求参数\n\n")
             appendRequestParameters(params)
-            append('\n')
-
-            append("## 响应参数\n\n")
-            if (returnType != null && returnType != PsiTypes.voidType()) {
-                append("| 参数名称 | 类型 | 说明 |\n")
-                append("| --- | --- | --- |\n")
+            append("\n## 响应参数\n\n")
+            if (returnType != null) {
+                append("| 参数名称 | 类型 | 说明 |\n| --- | --- | --- |\n")
                 appendResponseTable(returnType)
-            } else {
-                append("无响应参数\n")
-            }
-            append('\n')
-
-            append("## 请求示例\n\n")
-            val requestBodyParam =
-                params.find { it.hasAnnotation("org.springframework.web.bind.annotation.RequestBody") }
-            if (requestBodyParam != null) {
-                append("```json\n")
-                append(mockJsonGenerator.generate(requestBodyParam.type, 0))
-                append("\n```\n\n")
-            } else {
-                append("无请求体\n\n")
-            }
-
+            } else append("无响应参数\n")
+            append("\n## 请求示例\n\n")
+            val body = requestBody(method)
+            if (body == null) append("无请求体\n\n")
+            else append("```json\n${mockJsonGenerator.generate(body.type, 0)}\n```\n\n")
             append("## 响应示例\n\n")
-            if (returnType != null && returnType != PsiTypes.voidType()) {
-                append("```json\n")
-                append(mockJsonGenerator.generate(returnType, 0))
-                append("\n```\n")
-            } else {
-                append("无响应体\n")
-            }
+            if (returnType == null) append("无响应体\n")
+            else append("```json\n${mockJsonGenerator.generate(returnType, 0)}\n```\n")
         }
+    }
+
+    private fun requestBody(method: PsiMethod): PsiParameter? {
+        val params = method.parameterList.parameters
+        params.firstOrNull { it.hasAnnotation("org.springframework.web.bind.annotation.RequestBody") }?.let { return it }
+        if (RestMappingResolver.method(method)?.spring != false) return null
+        return params.filter { param -> param.annotations.none { it.qualifiedName in JAX_INJECTIONS } }.singleOrNull()
     }
 
     private fun responseBodyType(method: PsiMethod): PsiType? {
@@ -92,364 +73,160 @@ class DocGenerator {
             append("无请求参数\n")
             return
         }
-
-        val nestedTypes = linkedSetOf<PsiType>()
-        append("| 参数名称 | 类型 | 必填 | 长度 | 说明 |\n")
-        append("| --- | --- | --- | --- | --- |\n")
-        params.forEach { param ->
+        val nested = linkedSetOf<DocType>()
+        append("| 参数名称 | 类型 | 必填 | 长度 | 说明 |\n| --- | --- | --- | --- | --- |\n")
+        for (param in params) {
             ProgressManager.checkCanceled()
-            val type = param.type
-            append(
-                "| ${param.name} | ${type.presentableText} | ${isRequired(param)} | ${extractLengthConstraint(param)} | ${
-                    extractComment(
-                        param
-                    )
-                } |\n"
-            )
-
-            val psiClass = PsiTypesUtil.getPsiClass(type)
-            if (shouldExpand(psiClass, type)) {
-                nestedTypes += type
-            } else {
-                collectContainerTypes(type, nestedTypes)
-            }
+            val groups = ValidationRules.groups(param)
+            row(parameterName(param), param.type.presentableText, isRequired(param),
+                extractLength(param.annotations.toList(), groups), extractComment(param))
+            collectNested(DocType(param.type, groups), nested)
         }
         append('\n')
-
-        appendNestedTypeTables(nestedTypes)
-    }
-
-    private fun StringBuilder.appendNestedTypeTables(nestedTypes: MutableSet<PsiType>) {
-        val processedTypes = mutableSetOf<String>()
-        repeat(AppConstants.MAX_NESTED_TYPE_DEPTH) {
-            if (nestedTypes.isEmpty()) return
-            val currentBatch = nestedTypes.toList()
-            nestedTypes.clear()
-            currentBatch.forEach { type ->
-                ProgressManager.checkCanceled()
-                appendNestedTypeTable(type, processedTypes, nestedTypes)
-            }
-        }
+        appendNestedTables(nested)
     }
 
     private fun StringBuilder.appendResponseTable(type: PsiType) {
-        val psiClass = PsiTypesUtil.getPsiClass(type)
-        if (shouldExpand(psiClass, type)) {
-            val nestedTypes = linkedSetOf<PsiType>()
-            JsonFieldResolver.resolve(type).forEach { field ->
+        val nested = linkedSetOf<DocType>()
+        val groups = ValidationRules.defaultGroups()
+        if (shouldExpand(type)) {
+            for (field in JsonFieldResolver.resolve(type)) {
                 ProgressManager.checkCanceled()
-                append("| ${field.name} | ${field.type.presentableText} | ${extractFieldComment(field.declaration)} |\n")
-                collectNestedTypes(field.type, nestedTypes)
+                row(field.name, field.type.presentableText, extractFieldComment(field.declaration))
+                collectNested(DocType(field.type, groups), nested)
             }
-            append('\n')
-            appendNestedTypeTables(nestedTypes)
-            return
-        }
-
-        append("| result | ${type.presentableText} | |\n")
-        val nestedTypes = linkedSetOf<PsiType>()
-        collectContainerTypes(type, nestedTypes)
-        if (nestedTypes.isNotEmpty()) {
-            append('\n')
-            appendNestedTypeTables(nestedTypes)
-        }
-    }
-
-    private fun StringBuilder.appendNestedTypeTable(
-        type: PsiType,
-        processedTypes: MutableSet<String>,
-        nestedTypes: MutableSet<PsiType>
-    ) {
-        if (!processedTypes.add(type.canonicalText)) return
-
-        append("**${type.presentableText}**\n\n")
-        append("| 字段名称 | 类型 | 必填 | 长度 | 说明 |\n")
-        append("| --- | --- | --- | --- | --- |\n")
-
-        JsonFieldResolver.resolve(type).forEach { field ->
-            ProgressManager.checkCanceled()
-            append(
-                "| ${field.name} | ${field.type.presentableText} | ${isRequired(field.declaration)} | ${extractFieldLengthConstraint(field.declaration)} | ${
-                    extractFieldComment(
-                        field.declaration
-                    )
-                } |\n"
-            )
-
-            collectNestedTypes(field.type, nestedTypes)
+        } else {
+            row("result", type.presentableText, "")
+            collectContainer(DocType(type, groups), nested)
         }
         append('\n')
+        appendNestedTables(nested)
     }
 
-    private fun collectNestedTypes(type: PsiType, nestedTypes: MutableSet<PsiType>) {
-        if (shouldExpand(PsiTypesUtil.getPsiClass(type), type)) nestedTypes += type
-        else collectContainerTypes(type, nestedTypes)
+    private fun StringBuilder.appendNestedTables(nested: MutableSet<DocType>) {
+        val processed = mutableSetOf<Pair<String, Set<String>>>()
+        repeat(AppConstants.MAX_NESTED_TYPE_DEPTH) {
+            val batch = nested.toList()
+            nested.clear()
+            for (item in batch) {
+                ProgressManager.checkCanceled()
+                if (!processed.add(item.type.canonicalText to item.groups)) continue
+                append("**${cell(item.type.presentableText)}**\n\n")
+                if (item.groups != ValidationRules.defaultGroups()) {
+                    val description = if ("?" in item.groups) "按运行时校验条件判断" else item.groups.joinToString(", ")
+                    append("校验组：${cell(description)}\n\n")
+                }
+                append("| 字段名称 | 类型 | 必填 | 长度 | 说明 |\n| --- | --- | --- | --- | --- |\n")
+                val owner = PsiTypesUtil.getPsiClass(item.type)
+                for (field in JsonFieldResolver.resolve(item.type)) {
+                    ProgressManager.checkCanceled()
+                    val annotations = ValidationRules.annotations(field.declaration, owner)
+                    row(field.name, field.type.presentableText, ValidationRules.required(annotations, item.groups),
+                        extractLength(annotations, item.groups), extractFieldComment(field.declaration))
+                    collectNested(DocType(field.type, ValidationRules.cascadeGroups(annotations, item.groups)), nested)
+                }
+                append('\n')
+            }
+        }
     }
 
-    private fun collectContainerTypes(type: PsiType, nestedTypes: MutableSet<PsiType>, depth: Int = 0) {
+    private fun collectNested(item: DocType, nested: MutableSet<DocType>) {
+        if (shouldExpand(item.type)) nested += item else collectContainer(item, nested)
+    }
+
+    private fun collectContainer(item: DocType, nested: MutableSet<DocType>, depth: Int = 0) {
         if (depth >= AppConstants.MAX_NESTED_TYPE_DEPTH) return
-        val container = JsonTypeResolver.container(type) ?: return
-        val values = if (container.kind == JsonTypeResolver.Kind.MAP) container.arguments.drop(1) else container.arguments
-        values.filterNotNull().forEach {
+        val container = JsonTypeResolver.container(item.type) ?: return
+        val args = if (container.kind == JsonTypeResolver.Kind.MAP) container.arguments.drop(1) else container.arguments
+        for (type in args.filterNotNull()) {
             ProgressManager.checkCanceled()
-            if (shouldExpand(PsiTypesUtil.getPsiClass(it), it)) nestedTypes += it
-            else collectContainerTypes(it, nestedTypes, depth + 1)
+            val child = DocType(type, item.groups)
+            if (shouldExpand(type)) nested += child else collectContainer(child, nested, depth + 1)
         }
     }
 
-    private fun getApiInfo(method: PsiMethod): Pair<String, String> {
-        val classPaths = extractClassPaths(method.containingClass)
-        var methodPaths = listOf("")
-        val httpMethods = linkedSetOf<String>()
-        var springMapping = false
+    internal fun extractClassPaths(psiClass: PsiClass?): List<String> = RestMappingResolver.classPaths(psiClass)
 
-        for (annotation in method.annotations) {
-            val name = annotation.qualifiedName ?: continue
-
-            if (name.startsWith("org.springframework.web.bind.annotation")) {
-                val fixedMethod = when {
-                    name.endsWith("GetMapping") -> "GET"
-                    name.endsWith("PostMapping") -> "POST"
-                    name.endsWith("PutMapping") -> "PUT"
-                    name.endsWith("DeleteMapping") -> "DELETE"
-                    name.endsWith("PatchMapping") -> "PATCH"
-                    else -> null
-                }
-
-                if (fixedMethod != null) {
-                    springMapping = true
-                    httpMethods += fixedMethod
-                    methodPaths = extractPaths(annotation)
-                    break
-                }
-
-                if (name.endsWith("RequestMapping")) {
-                    springMapping = true
-                    httpMethods += SpringRequestMethods.declared(annotation)
-                    methodPaths = extractPaths(annotation)
-                    break
-                }
-            }
-
-            if (name.startsWith("javax.ws.rs") || name.startsWith("jakarta.ws.rs")) {
-                when {
-                    name.endsWith(".GET") -> httpMethods += "GET"
-                    name.endsWith(".POST") -> httpMethods += "POST"
-                    name.endsWith(".PUT") -> httpMethods += "PUT"
-                    name.endsWith(".DELETE") -> httpMethods += "DELETE"
-                    name.endsWith(".PATCH") -> httpMethods += "PATCH"
-                    name.endsWith(".HEAD") -> httpMethods += "HEAD"
-                    name.endsWith(".OPTIONS") -> httpMethods += "OPTIONS"
-                    name.endsWith(".Path") -> methodPaths = extractPaths(annotation)
-                }
-            }
-        }
-
-        if (springMapping) {
-            val combined = SpringRequestMethods.combine(
-                SpringRequestMethods.declared(method.containingClass?.getAnnotation(SpringRequestMethods.ANNOTATION)),
-                httpMethods.toList()
-            )
-            httpMethods.clear()
-            httpMethods.addAll(combined)
-        } else if (httpMethods.isEmpty()) {
-            httpMethods += "ALL"
-        }
-
-        val fullPaths = classPaths.flatMap { classPath ->
-            methodPaths.map { methodPath -> combinePaths(classPath, methodPath) }
-        }.distinct()
-
-        return httpMethods.joinToString(", ") to fullPaths.joinToString(", ")
-    }
-
-    internal fun extractClassPaths(psiClass: PsiClass?): List<String> {
-        if (psiClass == null) return listOf("")
-
-        val annotationNames = listOf(
-            "org.springframework.web.bind.annotation.RequestMapping",
-            "javax.ws.rs.Path",
-            "jakarta.ws.rs.Path"
-        )
-        for (annotationName in annotationNames) {
-            psiClass.getAnnotation(annotationName)?.let { return extractPaths(it) }
-        }
-        return listOf("")
-    }
-
-    private fun extractPaths(annotation: PsiAnnotation): List<String> {
-        val value = annotation.findDeclaredAttributeValue("value")
-            ?: annotation.findDeclaredAttributeValue("path")
-            ?: annotation.findAttributeValue("value")
-            ?: annotation.findAttributeValue("path")
-            ?: return listOf("")
-
-        return flattenAnnotationValues(value)
-            .mapNotNull { evaluateString(annotation, it) }
-            .distinct()
-            .ifEmpty { listOf("") }
-    }
-
-    private fun flattenAnnotationValues(value: PsiAnnotationMemberValue): List<PsiAnnotationMemberValue> {
-        return if (value is PsiArrayInitializerMemberValue) value.initializers.toList() else listOf(value)
-    }
-
-    private fun evaluateString(annotation: PsiAnnotation, value: PsiAnnotationMemberValue): String? {
-        val helper = JavaPsiFacade.getInstance(annotation.project).constantEvaluationHelper
-        val computed = helper.computeConstantExpression(value)
-        if (computed is String) return computed
-
-        val initializer = (value as? PsiReferenceExpression)
-            ?.resolve()
-            ?.let { it as? PsiField }
-            ?.initializer
-        val referencedValue = initializer?.let { helper.computeConstantExpression(it) }
-        return referencedValue as? String ?: (value as? PsiLiteralExpression)?.value as? String
-    }
-
-    private fun combinePaths(classPath: String, methodPath: String): String {
-        val segments = listOf(classPath, methodPath)
-            .map { it.trim().trim('/') }
-            .filter { it.isNotEmpty() }
-        return if (segments.isEmpty()) "/" else "/" + segments.joinToString("/")
+    private fun parameterName(param: PsiParameter): String {
+        val binding = param.annotations.firstOrNull { it.qualifiedName in NAMED_BINDINGS } ?: return param.name
+        return listOf("name", "value").firstNotNullOfOrNull {
+            RestMappingResolver.string(binding.findAttributeValue(it))?.takeIf(String::isNotEmpty)
+        } ?: param.name
     }
 
     private fun isRequired(param: PsiParameter): String {
         if (param.type.canonicalText.substringBefore('<') == "java.util.Optional" ||
-            param.annotations.any { it.qualifiedName in NULLABLE_ANNOTATIONS }
-        ) return "否"
-
+            param.annotations.any { it.qualifiedName in NULLABLE_ANNOTATIONS }) return "否"
+        if (param.annotations.any { it.qualifiedName in JAX_DEFAULTS }) return "否"
+        val jax = param.annotations.firstOrNull { it.qualifiedName in JAX_INJECTIONS }
+        if (jax != null) return if (jax.qualifiedName?.endsWith(".PathParam") == true) "是" else "否"
         val binding = param.annotations.firstOrNull { it.qualifiedName in REQUEST_BINDINGS } ?: return "是"
         val helper = JavaPsiFacade.getInstance(param.project).constantEvaluationHelper
-        val required = binding.findAttributeValue("required")?.let { helper.computeConstantExpression(it) }
-        if (required == false) return "否"
-
-        val defaultValue = binding.findAttributeValue("defaultValue")?.let { evaluateString(binding, it) }
-        return if (defaultValue != null && defaultValue != DEFAULT_NONE) "否" else "是"
+        if (binding.findAttributeValue("required")?.let { helper.computeConstantExpression(it) } == false) return "否"
+        val default = RestMappingResolver.string(binding.findAttributeValue("defaultValue"))
+        return if (default != null && default != DEFAULT_NONE) "否" else "是"
     }
 
-    private fun isRequired(field: PsiField): String =
-        if (field.annotations.any { it.qualifiedName in REQUIRED_FIELD_ANNOTATIONS }) "是" else "否"
+    private fun shouldExpand(type: PsiType): Boolean =
+        type !is PsiPrimitiveType && !type.canonicalText.startsWith("java.") &&
+            JsonTypeResolver.container(type) == null && PsiTypesUtil.getPsiClass(type)?.isEnum == false
 
-    private companion object {
-        // Spring's ValueConstants.DEFAULT_NONE distinguishes no default from an explicit empty default.
-        const val DEFAULT_NONE = "\n\t\t\n\t\t\n\uE000\uE001\uE002\n\t\t\t\t\n"
-        val REQUEST_BINDINGS = setOf(
-            "RequestParam", "RequestBody", "RequestHeader", "CookieValue",
-            "PathVariable", "RequestPart", "MatrixVariable"
-        ).map { "org.springframework.web.bind.annotation.$it" }.toSet()
-        val NULLABLE_ANNOTATIONS = setOf(
-            "org.jetbrains.annotations.Nullable", "javax.annotation.Nullable", "jakarta.annotation.Nullable",
-            "org.springframework.lang.Nullable", "org.jspecify.annotations.Nullable"
-        )
-        val REQUIRED_FIELD_ANNOTATIONS = setOf("javax.validation.constraints", "jakarta.validation.constraints")
-            .flatMap { namespace -> listOf("NotNull", "NotBlank", "NotEmpty").map { "$namespace.$it" } }
-            .toSet() + setOf("org.hibernate.validator.constraints.NotBlank", "org.hibernate.validator.constraints.NotEmpty")
-    }
-
-    private fun shouldExpand(psiClass: PsiClass?, type: PsiType): Boolean {
-        return psiClass != null &&
-                !psiClass.isEnum &&
-                JsonTypeResolver.container(type) == null &&
-                !type.canonicalText.startsWith("java.") &&
-                !isSimpleType(type)
-    }
-
-    private fun isSimpleType(type: PsiType) = when {
-        type is PsiPrimitiveType -> true
-        type.canonicalText in listOf(
-            "java.lang.String", "java.lang.Integer", "java.lang.Long",
-            "java.lang.Double", "java.lang.Float", "java.lang.Boolean",
-            "java.lang.Byte", "java.lang.Short", "java.lang.Character"
-        ) -> true
-
-        type.canonicalText.startsWith("java.math.") -> true
-        type.canonicalText.startsWith("java.time.") -> true
-        type.canonicalText.startsWith("java.util.Date") -> true
-        type.canonicalText.startsWith("java.sql.") -> true
-        type.canonicalText.startsWith("java.util.List") -> true
-        type.canonicalText.startsWith("java.util.Set") -> true
-        type.canonicalText.startsWith("java.util.Map") -> true
-        type.canonicalText.startsWith("java.util.Collection") -> true
-        else -> false
-    }
-
-    private fun extractComment(param: PsiParameter): String {
-        val method = param.declarationScope as? PsiMethod ?: return ""
-        val docComment = method.docComment ?: return ""
-        return docComment.findTagsByName("param")
-            .firstOrNull { it.valueElement?.text == param.name }
-            ?.dataElements
-            ?.joinToString(" ") { it.text }
-            ?.trim()
-            ?: ""
-    }
+    private fun extractComment(param: PsiParameter): String =
+        (param.declarationScope as? PsiMethod)?.docComment?.findTagsByName("param")
+            ?.firstOrNull { it.valueElement?.text == param.name }?.dataElements?.joinToString(" ") { it.text }?.trim().orEmpty()
 
     private fun extractFieldComment(field: PsiField): String {
         field.docComment?.let {
-            val desc = it.descriptionElements.joinToString(" ") { el -> el.text }
-                .trim()
-                .replace("\n", " ")
-                .replace("\\s+".toRegex(), " ")
-            if (desc.isNotEmpty()) return desc
+            val description = it.descriptionElements.joinToString(" ") { element -> element.text }.trim().replace(Regex("\\s+"), " ")
+            if (description.isNotEmpty()) return description
         }
-
-        field.children.find { it is PsiComment }?.let {
-            return it.text.removePrefix("//").removePrefix("/*").removeSuffix("*/").trim()
-        }
-
-        return ""
+        return field.children.filterIsInstance<PsiComment>().firstOrNull()?.text
+            ?.removePrefix("//")?.removePrefix("/*")?.removeSuffix("*/")?.trim().orEmpty()
     }
 
-    private fun extractLengthConstraint(param: PsiParameter): String =
-        extractLengthFromAnnotations(param.annotations)
-
-    private fun extractFieldLengthConstraint(field: PsiField): String =
-        extractLengthFromAnnotations(field.annotations)
-
-    private fun extractLengthFromAnnotations(annotations: Array<PsiAnnotation>): String {
-        val constraints = mutableListOf<String>()
-
-        annotations.forEach { annotation ->
-            when {
-                annotation.qualifiedName?.endsWith(".Size") == true ||
-                        annotation.qualifiedName?.endsWith(".Length") == true -> {
-                    val min = annotation.findAttributeValue("min")?.text ?: "0"
-                    val max = annotation.findAttributeValue("max")?.text ?: ""
-                    when {
-                        max.isNotEmpty() && max != Int.MAX_VALUE.toString() -> constraints += "$min-$max"
-                        min != "0" -> constraints += ">= $min"
-                    }
-                }
-
-                annotation.qualifiedName?.endsWith(".Min") == true -> {
-                    annotation.findAttributeValue("value")?.text?.let { constraints += ">= $it" }
-                }
-
-                annotation.qualifiedName?.endsWith(".Max") == true -> {
-                    annotation.findAttributeValue("value")?.text?.let { constraints += "<= $it" }
-                }
-
-                annotation.qualifiedName?.endsWith(".DecimalMin") == true -> {
-                    annotation.findAttributeValue("value")?.text?.replace("\"", "")?.takeIf(String::isNotEmpty)?.let {
-                        constraints += ">= $it"
-                    }
-                }
-
-                annotation.qualifiedName?.endsWith(".DecimalMax") == true -> {
-                    annotation.findAttributeValue("value")?.text?.replace("\"", "")?.takeIf(String::isNotEmpty)?.let {
-                        constraints += "<= $it"
-                    }
-                }
-
-                annotation.qualifiedName?.endsWith(".Pattern") == true -> {
-                    annotation.findAttributeValue("regexp")?.text?.replace("\"", "")?.takeIf {
-                        it.isNotEmpty() && it.length < 30
-                    }?.let { constraints += "格式: $it" }
-                }
+    private fun extractLength(annotations: List<PsiAnnotation>, groups: Set<String>): String =
+        annotations.filter { ValidationRules.active(it, groups) }.mapNotNull { annotation ->
+            fun value(name: String) = annotation.findAttributeValue(name)?.let {
+                JavaPsiFacade.getInstance(annotation.project).constantEvaluationHelper.computeConstantExpression(it)?.toString() ?: it.text
             }
-        }
+            when (annotation.qualifiedName?.substringAfterLast('.')) {
+                "Size", "Length" -> {
+                    val min = value("min") ?: "0"
+                    val max = value("max")
+                    when {
+                        max != null && max != Int.MAX_VALUE.toString() -> "$min-$max"
+                        min != "0" -> ">= $min"
+                        else -> null
+                    }
+                }
+                "Min" -> value("value")?.let { ">= $it" }
+                "Max" -> value("value")?.let { "<= $it" }
+                "DecimalMin" -> value("value")?.let { "${if (value("inclusive") == "false") ">" else ">="} $it" }
+                "DecimalMax" -> value("value")?.let { "${if (value("inclusive") == "false") "<" else "<="} $it" }
+                "Pattern" -> value("regexp")?.takeIf { it.isNotEmpty() && it.length < 30 }?.let { "格式: $it" }
+                else -> null
+            }
+        }.distinct().joinToString(", ")
 
-        return constraints.joinToString(", ")
+    private fun StringBuilder.row(vararg values: String) {
+        append("| ").append(values.joinToString(" | ") { cell(it) }).append(" |\n")
+    }
+
+    private fun cell(text: String): String = text.replace("&", "&amp;").replace("\\", "&#92;")
+        .replace("<", "&lt;").replace(">", "&gt;")
+        .replace("`", "&#96;").replace("|", "\\|").replace("\r\n", "\n").replace('\r', '\n').replace("\n", "<br>")
+
+    private companion object {
+        const val DEFAULT_NONE = "\n\t\t\n\t\t\n\uE000\uE001\uE002\n\t\t\t\t\n"
+        val REQUEST_BINDINGS = setOf("RequestParam", "RequestBody", "RequestHeader", "CookieValue", "PathVariable", "RequestPart", "MatrixVariable")
+            .map { "org.springframework.web.bind.annotation.$it" }.toSet()
+        val JAX_NAMESPACES = listOf("javax.ws.rs", "jakarta.ws.rs")
+        val JAX_INJECTIONS = JAX_NAMESPACES.flatMap { ns ->
+            listOf("QueryParam", "PathParam", "HeaderParam", "CookieParam", "MatrixParam", "FormParam", "BeanParam").map { "$ns.$it" } + "$ns.core.Context"
+        }.toSet()
+        val JAX_DEFAULTS = JAX_NAMESPACES.map { "$it.DefaultValue" }.toSet()
+        val NAMED_BINDINGS = REQUEST_BINDINGS - "org.springframework.web.bind.annotation.RequestBody" + JAX_INJECTIONS
+        val NULLABLE_ANNOTATIONS = setOf("org.jetbrains.annotations.Nullable", "javax.annotation.Nullable", "jakarta.annotation.Nullable",
+            "org.springframework.lang.Nullable", "org.jspecify.annotations.Nullable")
     }
 }

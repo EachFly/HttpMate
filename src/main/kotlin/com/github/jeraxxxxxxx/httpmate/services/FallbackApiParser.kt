@@ -1,11 +1,14 @@
 package com.github.jeraxxxxxxx.httpmate.services
 
+import com.github.jeraxxxxxxx.httpmate.constants.RestAnnotations
+
 /** Index-independent, structural scan of Java/Kotlin declaration headers. */
 internal object FallbackApiParser {
     data class Endpoint(val method: String, val path: String, val offset: Int)
     private data class Token(
         val text: String, val offset: Int, val isString: Boolean = false,
-        val endOffset: Int = offset + text.length
+        val endOffset: Int = offset + text.length,
+        val escapedDollars: Set<Int> = emptySet()
     )
     private data class Constant(val name: String, val scope: Int, val expression: List<Token>)
     private data class Annotation(val name: String, val arguments: List<Token>, val offset: Int) {
@@ -73,6 +76,45 @@ internal object FallbackApiParser {
     ): List<Endpoint> {
         val tokens = tokenize(text, checkCanceled)
         val endpoints = mutableListOf<Endpoint>()
+        data class Locator(val owner: String, val target: String, val paths: List<String>)
+        data class JaxEndpoint(val owner: String, val methods: List<String>, val paths: List<String>, val offset: Int)
+        val locators = mutableListOf<Locator>()
+        val jaxEndpoints = mutableListOf<JaxEndpoint>()
+        val classes = mutableSetOf<String>()
+        val jaxRoots = mutableMapOf<String, List<String>>()
+        val kotlin = tokens.any { !it.isString && it.text == "fun" }
+        val imports = mutableMapOf<String, String>()
+        val wildcardImports = mutableSetOf<String>()
+        val localAnnotations = mutableSetOf<String>()
+        tokens.forEachIndexed { index, token ->
+            if (token.isString) return@forEachIndexed
+            if ((token.text == "interface" && tokens.getOrNull(index - 1)?.text == "@") ||
+                (token.text == "class" && tokens.getOrNull(index - 1)?.text == "annotation")) {
+                tokens.getOrNull(index + 1)?.text?.let(localAnnotations::add)
+            }
+            if (token.text != "import") return@forEachIndexed
+            var end = index + 1
+            while (end < tokens.size && tokens[end].text != ";" &&
+                (end == index + 1 || !text.substring(tokens[end - 1].endOffset, tokens[end].offset).contains('\n'))) end++
+            val parts = tokens.subList(index + 1, end).map { it.text }
+            if (parts.isEmpty() || parts.first() == "static") return@forEachIndexed
+            if (parts.last() == "*") {
+                wildcardImports += parts.dropLast(2).joinToString("")
+                return@forEachIndexed
+            }
+            val alias = parts.indexOf("as")
+            val qualified = (if (alias < 0) parts else parts.take(alias)).joinToString("")
+            imports[if (alias < 0) qualified.substringAfterLast('.') else parts.getOrNull(alias + 1) ?: return@forEachIndexed] = qualified
+        }
+        fun mappingName(name: String): String? {
+            val qualified = if ('.' in name) name else imports[name]
+            if (qualified != null) return qualified.takeIf { it in RestAnnotations.ALL }?.substringAfterLast('.')
+            if (name !in mappings || name in localAnnotations) return null
+            if (wildcardImports.isNotEmpty()) {
+                return wildcardImports.map { "$it.$name" }.singleOrNull { it in RestAnnotations.ALL }?.substringAfterLast('.')
+            }
+            return name
+        }
 
         fun matchingEnd(start: Int, end: Int): Int {
             val close = when (tokens[start].text) {
@@ -196,7 +238,33 @@ internal object FallbackApiParser {
             var index = 0
             fun value(): String? {
                 val token = expression.getOrNull(index++) ?: return null
-                if (token.isString) return token.text
+                if (token.isString) {
+                    if (!kotlin || '$' !in token.text) return token.text
+                    val expanded = StringBuilder()
+                    var position = 0
+                    while (position < token.text.length) {
+                        checkCanceled()
+                        if (token.text[position] != '$' || position in token.escapedDollars) {
+                            expanded.append(token.text[position++]); continue
+                        }
+                        val start = position + 1
+                        val braced = token.text.getOrNull(start) == '{'
+                        val end = if (braced) token.text.indexOf('}', start + 1) else {
+                            var stop = start
+                            while (stop < token.text.length && token.text[stop].isJavaIdentifierPart()) stop++
+                            stop
+                        }
+                        if (end < 0) return null
+                        if (!braced && end == start) { expanded.append('$'); position++; continue }
+                        val source = token.text.substring(if (braced) start + 1 else start, end)
+                        val expressionTokens = tokenize(source, checkCanceled).map {
+                            it.copy(offset = token.offset, endOffset = token.endOffset)
+                        }
+                        expanded.append(evaluate(expressionTokens, visiting) ?: return null)
+                        position = end + if (braced) 1 else 0
+                    }
+                    return expanded.toString()
+                }
                 if (!token.text.first().isJavaIdentifierStart()) return null
                 val reference = StringBuilder(token.text)
                 while (expression.getOrNull(index)?.text == ".") {
@@ -255,25 +323,31 @@ internal object FallbackApiParser {
             return parts.joinToString("")
         }
 
-        fun emit(annotations: List<Annotation>, classPaths: List<String>, classMethods: List<String>) {
+        fun emit(annotations: List<Annotation>, classPaths: List<String>, classMethods: List<String>, owner: String, returnType: String?) {
             val mapping = annotations.firstOrNull { it.name in mappings } ?: return
             val isJaxRs = mapping.name == "Path" || mapping.name in verbs
             val paths = if (isJaxRs) annotations.firstOrNull { it.name == "Path" }?.paths { evaluate(it) } ?: listOf("")
                 else mapping.paths { evaluate(it) }
             val methods = when {
-                isJaxRs -> annotations.map { it.name }.filter { it in verbs }.ifEmpty { listOf("ALL") }
+                isJaxRs -> annotations.map { it.name }.filter { it in verbs }
                 mapping.name in springMethods -> listOf(springMethods.getValue(mapping.name))
                 else -> mapping.attribute("method").filter { !it.isString && it.text in verbs }.map { it.text }.distinct()
                     .ifEmpty { listOf("ALL") }
             }
             val effectiveMethods = if (isJaxRs) methods else SpringRequestMethods.combine(classMethods, methods)
+            if (isJaxRs) {
+                if (methods.isEmpty()) {
+                    if (returnType != null) locators += Locator(owner, returnType, paths)
+                } else jaxEndpoints += JaxEndpoint(owner, methods, paths, mapping.offset)
+                return
+            }
             for (base in classPaths) for (path in paths) for (method in effectiveMethods) {
                 val segments = listOf(base, path).map { it.trim().trim('/') }.filter { it.isNotEmpty() }
                 endpoints += Endpoint(method, "/" + segments.joinToString("/"), mapping.offset)
             }
         }
 
-        fun scanRegion(start: Int, end: Int, classPaths: List<String>, classMethods: List<String>) {
+        fun scanRegion(start: Int, end: Int, classPaths: List<String>, classMethods: List<String>, owner: String = "") {
             val annotations = mutableListOf<Annotation>()
             var index = start
             while (index < end) {
@@ -290,7 +364,7 @@ internal object FallbackApiParser {
                         var name = tokens.getOrNull(index)?.text ?: break
                         index++
                         while (index + 1 < end && tokens[index].text == ".") {
-                            name = tokens[index + 1].text
+                            name += "." + tokens[index + 1].text
                             index += 2
                         }
                         val args = if (index < end && tokens[index].text == "(") {
@@ -299,7 +373,7 @@ internal object FallbackApiParser {
                             index = (close + 1).coerceAtMost(end)
                             values
                         } else emptyList()
-                        annotations += Annotation(name, args, offset)
+                        mappingName(name)?.let { annotations += Annotation(it, args, offset) }
                     }
                     "class", "interface", "record", "object" -> {
                         if (tokens.getOrNull(index - 1)?.text in listOf(":", ".")) {
@@ -308,24 +382,31 @@ internal object FallbackApiParser {
                         }
                         val paths = annotations.firstOrNull { it.name == "RequestMapping" || it.name == "Path" }
                             ?.paths { evaluate(it) } ?: listOf("")
+                        val className = listOf(owner, tokens.getOrNull(index + 1)?.text.orEmpty()).filter(String::isNotEmpty).joinToString(".")
+                        classes += className
+                        annotations.firstOrNull { it.name == "Path" }?.let { jaxRoots[className] = it.paths { expression -> evaluate(expression) } }
                         val methods = annotations.firstOrNull { it.name == "RequestMapping" }
                             ?.attribute("method")?.filter { !it.isString && it.text in verbs }?.map { it.text }.orEmpty()
                         annotations.clear()
                         index = classHeaderEnd(index, end)
                         if (index < end && tokens[index].text == "{") {
                             val close = matchingEnd(index, end)
-                            scanRegion(index + 1, close, paths, methods)
+                            scanRegion(index + 1, close, paths, methods, className)
                             index = (close + 1).coerceAtMost(end)
                         }
                     }
                     "fun" -> {
-                        emit(annotations, classPaths, classMethods)
+                        var parameters = index + 1
+                        while (parameters < end && tokens[parameters].text !in setOf("(", "{", "=")) parameters++
+                        val close = if (tokens.getOrNull(parameters)?.text == "(") matchingEnd(parameters, end) else end
+                        val returnType = if (tokens.getOrNull(close + 1)?.text == ":") tokens.getOrNull(close + 2)?.text else null
+                        emit(annotations, classPaths, classMethods, owner, returnType)
                         annotations.clear()
                         index++
                     }
                     "(" -> {
                         // Java method headers; parameter annotations belong to the signature, not a new endpoint.
-                        emit(annotations, classPaths, classMethods)
+                        emit(annotations, classPaths, classMethods, owner, tokens.getOrNull(index - 2)?.text)
                         annotations.clear()
                         index = (matchingEnd(index, end) + 1).coerceAtMost(end)
                     }
@@ -343,6 +424,22 @@ internal object FallbackApiParser {
         }
 
         scanRegion(0, tokens.size, listOf(""), emptyList())
+        fun bases(owner: String, visited: Set<String> = emptySet()): List<String> {
+            checkCanceled()
+            if (owner in visited || visited.size >= 16) return emptyList()
+            jaxRoots[owner]?.let { return it }
+            return locators.filter { locator ->
+                val targets = classes.filter { it == locator.target || it.substringAfterLast('.') == locator.target }
+                targets.singleOrNull() == owner
+            }.flatMap { locator -> bases(locator.owner, visited + owner).flatMap { base ->
+                locator.paths.map { path -> RestMappingResolver.combine(base, path) }
+            } }.distinct()
+        }
+        for (endpoint in jaxEndpoints) {
+            for (base in bases(endpoint.owner)) for (path in endpoint.paths) for (method in endpoint.methods) {
+                endpoints += Endpoint(method, RestMappingResolver.combine(base, path), endpoint.offset)
+            }
+        }
         return endpoints.distinct()
     }
 
@@ -375,9 +472,11 @@ internal object FallbackApiParser {
                     val delimiter = quote.toString().repeat(if (triple) 3 else 1)
                     index += delimiter.length
                     val value = StringBuilder()
+                    val escapedDollars = mutableSetOf<Int>()
                     while (index < text.length && !text.startsWith(delimiter, index)) {
                         checkCanceled()
                         if (!triple && text[index] == '\\' && index + 1 < text.length) {
+                            if (text[index + 1] == '$') escapedDollars += value.length
                             value.append(when (text[index + 1]) {
                                 'n' -> '\n'
                                 'r' -> '\r'
@@ -390,7 +489,7 @@ internal object FallbackApiParser {
                         }
                     }
                     index = (index + delimiter.length).coerceAtMost(text.length)
-                    tokens += Token(value.toString(), start, true, index)
+                    tokens += Token(value.toString(), start, true, index, escapedDollars)
                 }
                 text[index].isJavaIdentifierStart() -> {
                     val start = index++

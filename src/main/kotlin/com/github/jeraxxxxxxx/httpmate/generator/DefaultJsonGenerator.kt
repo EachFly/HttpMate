@@ -17,6 +17,7 @@ class DefaultJsonGenerator : JsonGenerator {
                 PsiTypes.booleanType() -> "false"
                 PsiTypes.byteType(), PsiTypes.shortType(), PsiTypes.intType(), PsiTypes.longType() -> "0"
                 PsiTypes.floatType(), PsiTypes.doubleType() -> "0.0"
+                PsiTypes.charType() -> "\"a\""
                 else -> "null"
             }
         }
@@ -24,6 +25,7 @@ class DefaultJsonGenerator : JsonGenerator {
         val canonicalText = type.canonicalText
         // Handle String
         if (canonicalText == "java.lang.String") return "\"\""
+        if (canonicalText == "java.lang.Character") return "\"a\""
 
         // Handle Boxed Primitives
         if (canonicalText == "java.lang.Integer" || canonicalText == "java.lang.Long" ||
