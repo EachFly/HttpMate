@@ -12,19 +12,26 @@ const zip = 'build/distributions/HttpMate-1.2.8.zip';
 const digest = `sha256:${'1'.repeat(64)}`;
 const name = draftAssetName(zip, sha, digest);
 const asset = { path: `build/distributions/${name}`, name, digest };
-const draft = { id: 42, tag_name: '1.2.8', draft: true, target_commitish: 'b'.repeat(40),
+const draft = { id: 42, tag_name: '1.2.8', name: '1.2.8', draft: true, target_commitish: 'b'.repeat(40),
   upload_url: 'https://uploads.github.com/repos/EachFly/HttpMate/releases/42/assets{?name,label}',
   author: { login: 'github-actions[bot]' }, body: `Manual introduction\n${START}old${END}\nManual checklist` };
 
 function simulate({ releases = [], refs = [], target = sha, assets = [asset], commit = sha,
-  initial = draft, existing = [], atRead = () => {}, onUpload = () => {}, onPatch = () => {}, calls = [] } = {}) {
+  initial = draft, existing = [], atRead = () => {}, onUpload = () => {}, onPatch = () => {}, onCreate = () => {}, calls = [] } = {}) {
   const live = structuredClone(initial);
   const remoteAssets = structuredClone(existing);
   let reads = 0;
+  let created = false;
   const result = syncDraft({ version: '1.2.8', sha: commit, notes: 'new notes', assets, log: () => {},
     gh: (args, input) => {
       calls.push({ args, input });
-      if (args.at(-1) === 'repos/{owner}/{repo}/releases') return JSON.stringify([[], releases]);
+      if (args.at(-1) === 'repos/{owner}/{repo}/releases') return JSON.stringify([[], created ? [live] : releases]);
+      if (args[0] === 'release' && args[1] === 'create') {
+        Object.assign(live, { tag_name: args[2], name: args[2], body: input, target_commitish: commit });
+        onCreate(live);
+        created = true;
+        return 'https://github.com/EachFly/HttpMate/releases/tag/untagged-preview';
+      }
       if (args.at(-1) === 'repos/{owner}/{repo}/git/matching-refs/tags/') return JSON.stringify([refs]);
       if (args.at(-1).includes('/commits/')) return JSON.stringify({ sha: target });
       if (args[0] === 'api' && args[1] === 'repos/{owner}/{repo}/releases/42') {
@@ -51,10 +58,12 @@ function simulate({ releases = [], refs = [], target = sha, assets = [asset], co
 
 test('new draft contains the changelog block and is pinned to the build SHA', () => {
   const { calls } = simulate();
-  assert.deepEqual(calls.at(-1).args, ['release', 'create', '1.2.8', '--target', sha, '--draft', '--title', '1.2.8', '--notes-file', '-', asset.path]);
-  assert.ok(calls.at(-1).input.includes(`<!-- httpmate:build:${sha} -->`));
-  assert.ok(calls.at(-1).input.includes(name));
-  assert.ok(calls.at(-1).input.includes(`${START}\nnew notes`));
+  const creation = calls.find(call => call.args[0] === 'release' && call.args[1] === 'create');
+  assert.deepEqual(creation.args, ['release', 'create', '1.2.8', '--target', sha, '--draft', '--title', '1.2.8', '--notes-file', '-', asset.path]);
+  assert.ok(creation.input.includes(`<!-- httpmate:build:${sha} -->`));
+  assert.ok(creation.input.includes(name));
+  assert.ok(creation.input.includes(`${START}\nnew notes`));
+  assert.equal(calls.at(-1).args[1], 'repos/{owner}/{repo}/releases/42');
 });
 
 test('published releases, manual drafts and unmarked drafts are preserved', () => {
@@ -76,6 +85,7 @@ test('same-version automatic drafts refresh notes, source SHA and ZIP without re
   assert.ok(live.body.includes(name));
   assert.equal(calls.filter(call => call.args.includes('POST')).length, 1);
   const patch = calls.find(call => call.args.includes('PATCH'));
+  assert.equal(JSON.parse(patch.input).tag_name, '1.2.8');
   assert.equal(Object.hasOwn(JSON.parse(patch.input), 'draft'), false);
   assert.equal(calls.some(call => call.args.includes('DELETE') || call.args.includes('--clobber')), false);
 });
@@ -117,10 +127,49 @@ test('a failed upload leaves notes and existing ZIPs untouched', () => {
 
 test('publication reported by PATCH is flagged without reverting the release to draft', () => {
   const calls = [];
-  assert.throws(() => simulate({ releases: [draft], calls, onPatch: current => { current.draft = false; } }), /inspect it manually/);
+  assert.throws(() => simulate({ releases: [draft], calls, onPatch: current => { current.draft = false; } }), /manually before publishing/);
   const writes = calls.filter(call => call.args.includes('PATCH'));
   assert.equal(writes.length, 1);
   assert.equal(Object.hasOwn(JSON.parse(writes[0].input), 'draft'), false);
+});
+
+test('temporary draft URL is allowed when the actual API tag remains the version', () => {
+  const { result } = simulate({ onCreate: current => {
+    current.html_url = 'https://github.com/EachFly/HttpMate/releases/tag/untagged-preview';
+  } });
+  assert.equal(result.action, 'create');
+});
+
+test('creation fails if GitHub does not retain the expected tag or build identity', () => {
+  assert.throws(() => simulate({ onCreate: current => { current.tag_name = 'untagged-wrong'; } }), /could not be identified/);
+  assert.throws(() => simulate({ onCreate: current => { current.target_commitish = 'b'.repeat(40); } }), /identity verification failed/);
+  assert.throws(() => simulate({ onCreate: current => { current.draft = false; } }), /identity verification failed/);
+});
+
+test('a successful PATCH response with a changed tag is rejected without rollback', () => {
+  const calls = [];
+  assert.throws(() => simulate({ releases: [draft], calls, onPatch: current => { current.tag_name = 'untagged-wrong'; } }), /expected tag 1\.2\.8, received untagged-wrong/);
+  assert.equal(calls.filter(call => call.args.includes('PATCH')).length, 1);
+  assert.equal(calls.some(call => call.args.includes('DELETE')), false);
+});
+
+test('same-version untagged releases are preserved instead of creating duplicate drafts', () => {
+  for (const published of [true, false]) {
+    const orphan = { ...draft, tag_name: 'untagged-existing', draft: !published };
+    const { result, calls } = simulate({ releases: [orphan] });
+    assert.equal(result.action, 'skip');
+    assert.match(result.reason, /untagged placeholder/);
+    assert.equal(calls.length, 1);
+  }
+  assert.equal(simulate({ releases: [{ ...draft, tag_name: 'untagged-old', name: '1.2.7' }] }).result.action, 'create');
+});
+
+test('losing the tag before the fresh snapshot is safely skipped', () => {
+  const { result, calls } = simulate({ releases: [draft], atRead: (current, count) => {
+    if (count === 1) current.tag_name = 'untagged-changed';
+  } });
+  assert.equal(result.action, 'skip');
+  assert.equal(calls.some(call => call.args.includes('POST') || call.args.includes('PATCH')), false);
 });
 
 test('identical staged ZIPs are reused; conflicting names abort before PATCH', () => {
@@ -224,6 +273,7 @@ test('release validation rejects mismatched versions, moved tags and malformed b
   assert.throws(() => validateRelease({ tag: '1.2.8', version: '1.2.8', sha, body: `<!-- httpmate:build:${'b'.repeat(40)} -->` }), /checked-out commit/);
   assert.throws(() => validateRelease({ tag: '1.2.8', version: '1.2.8', sha, body: '<!-- httpmate:build:broken -->' }), /checked-out commit/);
   assert.equal(validateRelease({ tag: '1.2.8', version: '1.2.8', sha, body: `<!-- httpmate:build:${sha} -->` }), true);
+  assert.throws(() => validateRelease({ tag: 'untagged-example', version: '1.2.8', sha }), /tag: untagged-example, pluginVersion: 1\.2\.8/);
 });
 
 test('manual legacy releases are explicitly reported as unmarked', () => {

@@ -1,5 +1,14 @@
 # HttpMate Changelog
 
+## [Unreleased]
+
+### Fixed / 修复
+
+- Explicitly preserved the version tag when refreshing release drafts, verified tag/build identity after creation and updates, and stopped automatic draft creation when the same version already has an untagged release.
+- 更新发布草稿时显式保留版本标签，创建及更新后校验标签与构建身份；同版本存在 untagged 异常发布记录时停止自动新建草稿。
+- Clarified release validation failures with the actual Git tag and plugin version instead of treating the release title as the tag.
+- 发布校验失败时显示实际 Git 标签和插件版本，明确区分发布标题与标签，不绕过版本一致性检查。
+
 ## [1.2.9] - 2026-11-01
 
 ### Fixed / 修复

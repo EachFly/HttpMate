@@ -3,7 +3,10 @@ import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 export function validateRelease({ tag, version, sha, body = '' }) {
-  if (!version || tag !== version) throw new Error('Release tag must match pluginVersion.');
+  if (!version || tag !== version) {
+    throw new Error(`Release tag must match pluginVersion (tag: ${tag ?? '<missing>'}, pluginVersion: ${version ?? '<missing>'}). ` +
+      'The release title is not its Git tag. Select the version tag before publishing; untagged-* placeholders are not accepted.');
+  }
   const markers = [...body.matchAll(/<!-- httpmate:build:([0-9a-f]{40}) -->/gi)];
   if (body.includes('httpmate:build:') && (markers.length !== 1 || markers[0][1] !== sha)) {
     throw new Error('Release build marker does not match the checked-out commit; refusing Marketplace publication.');

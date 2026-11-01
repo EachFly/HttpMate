@@ -17,6 +17,10 @@ function managedRange(body) {
 }
 
 export function planDraft(releases, version, notes) {
+  // A published placeholder tag must not result in another release for the same version.
+  if (releases.some(release => release.name === version && release.tag_name?.startsWith('untagged-'))) {
+    return { action: 'skip', reason: 'A release with this version title still has an untagged placeholder. Check its Git tag manually; leaving it unchanged.' };
+  }
   const matches = releases.filter(release => release.tag_name === version);
   const block = `${START}\n${notes.trim()}\n${END}`;
   if (matches.length === 0) return { action: 'create', body: block };
@@ -79,6 +83,14 @@ function withBuild(body, sha) {
     ? body.replace(/<!-- httpmate:build:[0-9a-f]{40} -->/i, marker) : `${marker}\n${body}`;
 }
 
+function assertDraftIdentity(release, version, sha, body) {
+  if (!release.draft || release.immutable || release.tag_name !== version ||
+      release.body !== body || release.target_commitish !== sha) {
+    throw new Error(`Release identity verification failed (expected tag ${version}, received ${release.tag_name ?? '<missing>'}). ` +
+      'Check the draft tag and build commit manually before publishing; no automatic rollback will be attempted.');
+  }
+}
+
 export function syncDraft({ version, sha, notes, assets, gh, log = console.log }) {
   if (!/^[0-9a-f]{40}$/i.test(sha ?? '')) throw new Error('A full build commit SHA is required.');
   if (!/^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/.test(version)) throw new Error('Invalid plugin version.');
@@ -111,6 +123,12 @@ export function syncDraft({ version, sha, notes, assets, gh, log = console.log }
   const body = withBuild(plan.body, sha);
   if (plan.action === 'create') {
     gh(['release', 'create', version, '--target', sha, '--draft', '--title', version, '--notes-file', '-', ...assets.map(asset => asset.path)], body);
+    // A draft's html_url may contain untagged-*; only the API tag_name establishes identity.
+    const createdPages = JSON.parse(gh(['api', '--paginate', '--slurp', 'repos/{owner}/{repo}/releases']));
+    const created = createdPages.flat().filter(release => release.tag_name === version);
+    if (created.length !== 1) throw new Error('Created draft could not be identified by its version tag; inspect it manually before publishing.');
+    const verified = JSON.parse(gh(['api', `repos/{owner}/{repo}/releases/${created[0].id}`]));
+    assertDraftIdentity(verified, version, sha, body);
   } else {
     const assertUnchanged = () => {
       const live = JSON.parse(gh(['api', `repos/{owner}/{repo}/releases/${plan.id}`]));
@@ -138,10 +156,8 @@ export function syncDraft({ version, sha, notes, assets, gh, log = console.log }
     // GitHub has no documented atomic "only update if still draft" precondition.
     if (body !== (expected.body ?? '') || expected.target_commitish !== sha) {
       const updated = JSON.parse(gh(['api', '--method', 'PATCH', `repos/{owner}/{repo}/releases/${plan.id}`, '--input', '-'],
-        JSON.stringify({ body, target_commitish: sha })));
-      if (!updated.draft || updated.body !== body || updated.target_commitish !== sha) {
-        throw new Error('Release changed while its metadata was being updated; inspect it manually before publishing.');
-      }
+        JSON.stringify({ tag_name: version, body, target_commitish: sha })));
+      assertDraftIdentity(updated, version, sha, body);
     }
   }
   log(`Release draft ${plan.action}: ${version}`);
