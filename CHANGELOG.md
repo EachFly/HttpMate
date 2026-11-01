@@ -1,5 +1,27 @@
 # HttpMate Changelog
 
+## [1.2.9] - 2026-11-01
+
+### Fixed / 修复
+
+- Bound release drafts to the built commit, refreshed same-version automatic drafts with state-conflict checks, preserved published releases and manual notes, and uploaded uniquely named ZIPs without deleting old assets.
+- 发布草稿绑定构建提交，同版本自动草稿支持更新并检查状态冲突；保留正式 Release 与手工说明，新 ZIP 按构建身份命名且不删除旧附件。
+- Enabled Kotlin class/method generation through UAST and generated JSON strings for primitive and boxed character values.
+- 通过 UAST 支持 Kotlin 类与方法的生成入口，为 char/Character 生成字符字符串示例。
+- Shared Spring composed-mapping and alias resolution between search and documentation; skipped unresolved paths instead of assuming root routes.
+- 搜索与文档共用 Spring 组合映射及别名解析，无法求值的路径不再被误当作根路径。
+- Distinguished JAX-RS subresource locators from endpoints, joined statically resolvable child paths, and recognized entity parameters in request examples.
+- 区分 JAX-RS 子资源定位方法与接口，拼接可静态解析的子资源路径，识别请求体参数并生成示例。
+- Respected annotation namespaces/imports and evaluated constant Kotlin string templates in fallback scans.
+- 后备扫描检查注解包名与导入，并解析由常量组成的 Kotlin 字符串模板。
+- Used bound parameter names, getter constraints and validation groups in documentation, and escaped Markdown table cells.
+- 文档采用实际绑定参数名、getter 校验约束与校验分组，并统一转义 Markdown 表格内容。
+
+### Tests / 测试
+
+- Added 21 plugin regression tests for Kotlin generation, composed mappings, JAX-RS subresources, path resolution, validation and Markdown output, plus isolated release-script coverage for same-version updates, conflicts and non-destructive ZIP uploads.
+- 新增 21 项插件回归测试，覆盖 Kotlin 生成、组合映射、JAX-RS 子资源、路径解析、校验与 Markdown 输出；发布脚本测试覆盖同版本更新、并发冲突及不删除旧包的 ZIP 上传。
+
 ## [1.2.8] - 2026-10-28
 
 ### Fixed / 修复

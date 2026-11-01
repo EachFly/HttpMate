@@ -112,7 +112,7 @@ build/distributions/
 
 ```properties
 pluginName = HttpMate
-pluginVersion = 1.2.8
+pluginVersion = 1.2.9
 platformType = IC
 platformVersion = 2024.3.6
 pluginSinceBuild = 243
@@ -215,14 +215,29 @@ HttpMate/
 
 ## 发布草稿说明 (Release Drafts)
 
-构建流程不会删除其他 Release 草稿，只创建或更新当前版本的自动草稿。自动草稿使用
-`<!-- httpmate:changelog:start -->` 和 `<!-- httpmate:changelog:end -->` 标记 Changelog 生成区块；
-可以在区块前后维护手工说明，这些文字在后续构建中会保留。区块内的内容会随 Changelog 更新。
+构建流程会创建或更新当前版本的自动 Release 草稿，读取对应 Changelog，并将目标更新为实际构建的提交 SHA。
+不修改版本号时，新构建仍可刷新同版本草稿的说明和插件包；只有草稿已发布后才需要升级版本号。
+已发布的正式版／预发行版、手工创建的草稿及没有生成区块标记的旧草稿会保留并提示跳过。
+自动更新仅替换 `<!-- httpmate:changelog:start -->` 与 `<!-- httpmate:changelog:end -->` 之间的内容，
+保留区块外的手工说明，并同步构建 SHA 标记。请不要删除这些标记。
 
-同版本的正式 Release、手工创建的草稿，以及没有上述标记的旧草稿都会保留并提示跳过，不会自动接管。
+草稿附件采用“原包名 + 提交编号 + 内容摘要”的唯一名称；先上传新 ZIP，再更新说明中的当前构建附件清单。
+旧 ZIP 保留为历史构建，不使用 `--clobber` 或删除后重传，避免上传失败导致旧包丢失。
+写入前会重新检查草稿状态及人工可编辑的信息；发现发布或编辑冲突则停止，可能留下未被清单引用的新附件，
+但不会自动回滚、删除附件或将正式版改回草稿。GitHub API 不提供原子的“仅在仍为草稿时更新”操作，
+最后一次检查与写入之间仍有并发窗口；请等 Build 完成后再点击 Publish release，不要在更新期间编辑或发布草稿。
+如果同名 Git 标签已存在但指向其他提交，构建会拒绝更新草稿，不会自动移动标签。
+
 正式版和从草稿发布的预发行版均通过 `release.published` 触发插件发布。
+Release 标签必须与检出代码的 `pluginVersion` 一致；自动草稿的构建 SHA 标记也会在上传 Marketplace 前校验，
+请保留该标记。手工／历史 Release 缺少标记时会提示无法验证构建来源。附件上传不删除旧文件：相同名称、相同摘要的
+附件会复用，不同内容或无法验证摘要的附件会报错并保持原文件不变。
 
-发布脚本的本地回归测试：`node --test .github/scripts/release-draft.test.mjs`（只模拟调用，不连接 GitHub）。
+发布脚本的本地回归测试：`node --test .github/scripts/*.test.mjs`（只模拟调用，不连接 GitHub）。
+
+文档校验规则支持参数上的 `@Validated` 分组（含分组继承）及字段/getter 约束；组序列、方法级校验或
+级联分组转换等无法静态确定的情形使用“条件必填”提示，不将其误写为无条件必填。
+JAX-RS 子资源按可静态确定的返回类型拼接路径，动态返回子类型的路由无法完整推断。
 
 ## 🤝 贡献与许可 (Contributing & License)
 
