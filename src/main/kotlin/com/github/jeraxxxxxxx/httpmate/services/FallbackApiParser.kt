@@ -435,9 +435,9 @@ internal object FallbackApiParser {
                 locator.paths.map { path -> RestMappingResolver.combine(base, path) }
             } }.distinct()
         }
-        for (endpoint in jaxEndpoints) {
-            for (base in bases(endpoint.owner)) for (path in endpoint.paths) for (method in endpoint.methods) {
-                endpoints += Endpoint(method, RestMappingResolver.combine(base, path), endpoint.offset)
+        for ((owner, methods, paths, offset) in jaxEndpoints) {
+            for (base in bases(owner)) for (path in paths) for (method in methods) {
+                endpoints += Endpoint(method, RestMappingResolver.combine(base, path), offset)
             }
         }
         return endpoints.distinct()

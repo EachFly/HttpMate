@@ -56,7 +56,7 @@ class DocGenerator {
         val params = method.parameterList.parameters
         params.firstOrNull { it.hasAnnotation("org.springframework.web.bind.annotation.RequestBody") }?.let { return it }
         if (RestMappingResolver.method(method)?.spring != false) return null
-        return params.filter { param -> param.annotations.none { it.qualifiedName in JAX_INJECTIONS } }.singleOrNull()
+        return params.singleOrNull { param -> param.annotations.none { it.qualifiedName in JAX_INJECTIONS } }
     }
 
     private fun responseBodyType(method: PsiMethod): PsiType? {
@@ -108,22 +108,22 @@ class DocGenerator {
         repeat(AppConstants.MAX_NESTED_TYPE_DEPTH) {
             val batch = nested.toList()
             nested.clear()
-            for (item in batch) {
+            for ((type, groups) in batch) {
                 ProgressManager.checkCanceled()
-                if (!processed.add(item.type.canonicalText to item.groups)) continue
-                append("**${cell(item.type.presentableText)}**\n\n")
-                if (item.groups != ValidationRules.defaultGroups()) {
-                    val description = if ("?" in item.groups) "按运行时校验条件判断" else item.groups.joinToString(", ")
+                if (!processed.add(type.canonicalText to groups)) continue
+                append("**${cell(type.presentableText)}**\n\n")
+                if (groups != ValidationRules.defaultGroups()) {
+                    val description = if ("?" in groups) "按运行时校验条件判断" else groups.joinToString(", ")
                     append("校验组：${cell(description)}\n\n")
                 }
                 append("| 字段名称 | 类型 | 必填 | 长度 | 说明 |\n| --- | --- | --- | --- | --- |\n")
-                val owner = PsiTypesUtil.getPsiClass(item.type)
-                for (field in JsonFieldResolver.resolve(item.type)) {
+                val owner = PsiTypesUtil.getPsiClass(type)
+                for (field in JsonFieldResolver.resolve(type)) {
                     ProgressManager.checkCanceled()
                     val annotations = ValidationRules.annotations(field.declaration, owner)
-                    row(field.name, field.type.presentableText, ValidationRules.required(annotations, item.groups),
-                        extractLength(annotations, item.groups), extractFieldComment(field.declaration))
-                    collectNested(DocType(field.type, ValidationRules.cascadeGroups(annotations, item.groups)), nested)
+                    row(field.name, field.type.presentableText, ValidationRules.required(annotations, groups),
+                        extractLength(annotations, groups), extractFieldComment(field.declaration))
+                    collectNested(DocType(field.type, ValidationRules.cascadeGroups(annotations, groups)), nested)
                 }
                 append('\n')
             }

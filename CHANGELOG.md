@@ -17,6 +17,9 @@
 - Used bound parameter names, getter constraints and validation groups in documentation, and escaped Markdown table cells.
 - 文档采用实际绑定参数名、getter 校验约束与校验分组，并统一转义 Markdown 表格内容。
 
+- Simplified three Kotlin collection call chains and used destructuring in two loops to resolve all five Qodana inspections.
+- 简化三处 Kotlin 集合调用链，并在两处循环中采用解构声明，修复本次 Qodana 报告的五项检查问题。
+
 ### Tests / 测试
 
 - Added 21 plugin regression tests for Kotlin generation, composed mappings, JAX-RS subresources, path resolution, validation and Markdown output, plus isolated release-script coverage for same-version updates, conflicts and non-destructive ZIP uploads.

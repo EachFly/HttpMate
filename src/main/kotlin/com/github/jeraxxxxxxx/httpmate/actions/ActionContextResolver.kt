@@ -35,12 +35,12 @@ object ActionContextResolver {
 
     internal fun findPsiClass(element: PsiElement?): PsiClass? {
         return PsiTreeUtil.getParentOfType(element, PsiClass::class.java, false)
-            ?: generateSequence(element) { it.parent }.mapNotNull { it.toUElementOfType<UClass>()?.javaPsi }.firstOrNull()
+            ?: generateSequence(element) { it.parent }.firstNotNullOfOrNull { it.toUElementOfType<UClass>()?.javaPsi }
     }
 
     internal fun findPsiMethod(element: PsiElement?): PsiMethod? {
         return PsiTreeUtil.getParentOfType(element, PsiMethod::class.java, false)
-            ?: generateSequence(element) { it.parent }.mapNotNull { it.toUElementOfType<UMethod>()?.javaPsi }.firstOrNull()
+            ?: generateSequence(element) { it.parent }.firstNotNullOfOrNull { it.toUElementOfType<UMethod>()?.javaPsi }
     }
 
     private fun findSingleTopLevelClass(psiFile: PsiFile?): PsiClass? {
