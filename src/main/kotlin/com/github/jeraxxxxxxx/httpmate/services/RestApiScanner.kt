@@ -16,6 +16,8 @@ import com.intellij.psi.SmartPointerManager
 import com.intellij.psi.SmartPsiElementPointer
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.searches.AnnotatedElementsSearch
+import com.intellij.psi.search.searches.ClassInheritorsSearch
+import com.intellij.psi.PsiModifier
 import com.intellij.psi.PsiClass
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.util.Processor
@@ -75,34 +77,61 @@ class RestApiScanner(private val project: Project) {
 
     fun scanBatch(candidates: List<SmartPsiElementPointer<PsiMethod>>): List<RestApiItem> {
         val items = mutableListOf<RestApiItem>()
+        val implementations = mutableMapOf<PsiClass, List<PsiClass>>()
+        val scope = GlobalSearchScope.projectScope(project)
 
         for (candidate in candidates) {
             ProgressManager.checkCanceled()
             val method = candidate.element ?: continue
             val mapping = RestMappingResolver.method(method) ?: continue
-            val navigationElement = method.navigationElement.takeIf(PsiElement::isValid) ?: method
-            val pointer = SmartPointerManager.createPointer(navigationElement)
-
-            for (fullPath in RestMappingResolver.fullPaths(method, mapping)) {
-                for (httpMethod in mapping.methods.ifEmpty { listOf("ALL") }) {
-                    items.add(
-                        RestApiItem(
-                            method = httpMethod,
-                            path = fullPath,
-                            fileName = navigationElement.containingFile?.name
-                                ?: method.containingFile?.name
-                                ?: "",
-                            navigationOffset = navigationElement.textOffset,
-                            elementPointer = pointer,
-                            icon = RestApiIcons.getIcon(httpMethod)
-                        )
-                    )
-                }
+            val owner = method.containingClass
+            if (!mapping.spring || owner == null || method.hasModifierProperty(PsiModifier.PRIVATE) ||
+                method.hasModifierProperty(PsiModifier.STATIC)) {
+                appendItems(items, method, mapping, owner)
+                continue
             }
+            val controllers = implementations.getOrPut(owner) {
+                ClassInheritorsSearch.search(owner, scope, true).findAll().filter(::isConcreteController)
+            }
+            var foundImplementation = false
+            for (controller in controllers) {
+                ProgressManager.checkCanceled()
+                val implementation = controller.findMethodBySignature(method, true) ?: continue
+                val effective = RestMappingResolver.method(implementation, controller) ?: continue
+                if (!effective.spring) continue
+                appendItems(items, implementation, effective, controller)
+                foundImplementation = true
+            }
+            if (!foundImplementation || isConcreteController(owner)) appendItems(items, method, mapping, owner)
         }
+        return items.distinctBy(RestApiItem::locationKey)
+    }
 
-        return items.distinctBy {
-            listOf(it.method, it.path, it.elementPointer.virtualFile?.url, it.navigationOffset)
+    private fun isConcreteController(owner: PsiClass): Boolean =
+        !owner.isInterface && !owner.hasModifierProperty(PsiModifier.ABSTRACT) &&
+            RestMappingResolver.isSpringController(owner)
+
+    private fun appendItems(
+        items: MutableList<RestApiItem>, method: PsiMethod, mapping: RestMappingResolver.Mapping, owner: PsiClass?
+    ) {
+        val navigationElement = method.navigationElement.takeIf(PsiElement::isValid) ?: method
+        val pointer = SmartPointerManager.createPointer(navigationElement)
+
+        for (fullPath in RestMappingResolver.fullPaths(method, mapping, owner)) {
+            for (httpMethod in mapping.methods.ifEmpty { listOf("ALL") }) {
+                items.add(
+                    RestApiItem(
+                        method = httpMethod,
+                        path = fullPath,
+                        fileName = navigationElement.containingFile?.name
+                            ?: method.containingFile?.name
+                            ?: "",
+                        navigationOffset = navigationElement.textOffset,
+                        elementPointer = pointer,
+                        icon = RestApiIcons.getIcon(httpMethod)
+                    )
+                )
+            }
         }
     }
 

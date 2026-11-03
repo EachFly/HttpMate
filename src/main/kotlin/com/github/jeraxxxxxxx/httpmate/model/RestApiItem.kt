@@ -18,4 +18,6 @@ data class RestApiItem(
 ) {
     /** 获取关联的 PSI 元素，元素失效时返回 null */
     val element: PsiElement? get() = elementPointer.element
+
+    internal fun locationKey() = listOf(method, path, elementPointer.virtualFile?.url, navigationOffset)
 }

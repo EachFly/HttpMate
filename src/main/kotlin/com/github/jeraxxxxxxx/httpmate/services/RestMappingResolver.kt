@@ -7,6 +7,7 @@ import com.intellij.psi.PsiAnnotation
 import com.intellij.psi.PsiAnnotationMemberValue
 import com.intellij.psi.PsiArrayInitializerMemberValue
 import com.intellij.psi.PsiClass
+import com.intellij.psi.PsiClassObjectAccessExpression
 import com.intellij.psi.PsiMethod
 import com.intellij.psi.PsiReferenceExpression
 import com.intellij.psi.search.GlobalSearchScope
@@ -24,10 +25,45 @@ internal object RestMappingResolver {
     ).mapKeys { "org.springframework.web.bind.annotation.${it.key}" }
     private val jaxNamespaces = listOf("javax.ws.rs", "jakarta.ws.rs")
 
-    fun method(method: PsiMethod): Mapping? {
-        method.annotations.firstNotNullOfOrNull { spring(it) }?.let { mapping ->
-            val owner = method.containingClass?.annotations?.firstNotNullOfOrNull { spring(it) }
-            return mapping.copy(methods = SpringRequestMethods.combine(owner?.methods.orEmpty(), mapping.methods))
+    private fun <T> hierarchy(start: T, parents: (T) -> List<T>): Sequence<T> = sequence {
+        val queue = ArrayDeque(listOf(start))
+        val visited = mutableSetOf<T>()
+        while (queue.isNotEmpty()) {
+            ProgressManager.checkCanceled()
+            val next = queue.removeFirst()
+            if (!visited.add(next)) continue
+            yield(next)
+            queue.addAll(parents(next))
+        }
+    }
+
+    private fun springClass(owner: PsiClass?): Mapping? = owner?.let {
+        hierarchy(it) { cls -> cls.supers.toList() }.firstNotNullOfOrNull { cls ->
+            cls.annotations.firstNotNullOfOrNull { spring(it) }
+        }
+    }
+
+    fun isSpringController(owner: PsiClass): Boolean {
+        val visited = mutableSetOf<String>()
+        fun controller(annotation: PsiAnnotation, depth: Int): Boolean {
+            ProgressManager.checkCanceled()
+            val name = annotation.qualifiedName ?: return false
+            if (name == "org.springframework.stereotype.Controller" ||
+                name == "org.springframework.web.bind.annotation.RestController") return true
+            if (depth >= 32 || !visited.add(name)) return false
+            return annotation.resolveAnnotationType()?.annotations?.any { controller(it, depth + 1) } == true
+        }
+        return hierarchy(owner) { it.supers.toList() }.any { cls ->
+            cls.annotations.any { controller(it, 0) }
+        }
+    }
+
+    fun method(method: PsiMethod, owner: PsiClass? = method.containingClass): Mapping? {
+        hierarchy(method) { it.findSuperMethods().toList() }.firstNotNullOfOrNull { declaration ->
+            declaration.annotations.firstNotNullOfOrNull { spring(it) }
+        }?.let { mapping ->
+            val classMapping = springClass(owner)
+            return mapping.copy(methods = SpringRequestMethods.combine(classMapping?.methods.orEmpty(), mapping.methods))
         }
         val verbs = method.annotations.mapNotNull { annotation ->
             val name = annotation.qualifiedName ?: return@mapNotNull null
@@ -43,20 +79,20 @@ internal object RestMappingResolver {
 
     fun classPaths(psiClass: PsiClass?): List<String> {
         if (psiClass == null) return listOf("")
-        psiClass.annotations.firstNotNullOfOrNull { spring(it) }?.let { return it.paths }
+        springClass(psiClass)?.let { return it.paths }
         return psiClass.annotations.firstOrNull { it.qualifiedName in RestAnnotations.CLASS_PATH_ANNOTATIONS }
             ?.let(::paths) ?: listOf("")
     }
 
-    fun fullPaths(method: PsiMethod, mapping: Mapping): List<String> =
-        (if (mapping.spring) classPaths(method.containingClass) else jaxBasePaths(method.containingClass))
+    fun fullPaths(method: PsiMethod, mapping: Mapping, owner: PsiClass? = method.containingClass): List<String> =
+        (if (mapping.spring) classPaths(owner) else jaxBasePaths(owner))
             .flatMap { base -> mapping.paths.map { combine(base, it) } }.distinct()
 
     private fun jaxBasePaths(owner: PsiClass?, visited: Set<PsiClass> = emptySet()): List<String> {
         if (owner == null || owner in visited || visited.size >= 16) return emptyList()
-        owner.annotations.firstOrNull { it.qualifiedName in jaxNamespaces.map { ns -> "$ns.Path" } }
-            ?.let { return paths(it) }
         val result = mutableListOf<String>()
+        owner.annotations.firstOrNull { it.qualifiedName in jaxNamespaces.map { ns -> "$ns.Path" } }
+            ?.let { result.addAll(paths(it)) }
         val facade = JavaPsiFacade.getInstance(owner.project)
         for (namespace in jaxNamespaces) {
             val pathClass = facade.findClass("$namespace.Path", GlobalSearchScope.allScope(owner.project)) ?: continue
@@ -100,34 +136,47 @@ internal object RestMappingResolver {
             ?: annotation.findAttributeValue("value") ?: annotation.findAttributeValue("path"))
             ?.let(::pathValues) ?: listOf("")
 
-    private fun spring(annotation: PsiAnnotation, visited: Set<String> = emptySet()): Mapping? {
+    private fun spring(
+        annotation: PsiAnnotation,
+        visited: Set<String> = emptySet(),
+        overrides: Map<Pair<String, String>, PsiAnnotationMemberValue> = emptyMap()
+    ): Mapping? {
         ProgressManager.checkCanceled()
         val name = annotation.qualifiedName ?: return null
         if (name in visited || visited.size >= 32) return null
         if (name == SpringRequestMethods.ANNOTATION || name in springVerbs) {
-            val methods = springVerbs[name]?.let(::listOf) ?: SpringRequestMethods.declared(annotation)
-            return Mapping(paths(annotation), methods, true)
+            val methods = springVerbs[name]?.let(::listOf)
+                ?: overrides[name to "method"]?.let(SpringRequestMethods::values)
+                ?: SpringRequestMethods.declared(annotation)
+            val path = overrides[name to "path"] ?: overrides[name to "value"]
+            return Mapping(path?.let(::pathValues) ?: paths(annotation), methods, true)
         }
         val declaration = annotation.resolveAnnotationType() ?: return null
-        val inherited = declaration.annotations.firstNotNullOfOrNull { spring(it, visited + name) } ?: return null
-        var result = inherited
+        val forwarded = overrides.toMutableMap()
+        val conventional = mutableMapOf<String, PsiAnnotationMemberValue>()
         for (attribute in declaration.methods) {
             ProgressManager.checkCanceled()
             val alias = attribute.getAnnotation("org.springframework.core.annotation.AliasFor")
             val target = string(alias?.findDeclaredAttributeValue("attribute"))?.takeIf(String::isNotEmpty)
                 ?: string(alias?.findDeclaredAttributeValue("value"))?.takeIf(String::isNotEmpty)
                 ?: attribute.name
-            if (target !in setOf("value", "path", "method")) continue
-            val explicit = annotation.findDeclaredAttributeValue(attribute.name)
+            val explicit = overrides[name to attribute.name] ?: annotation.findDeclaredAttributeValue(attribute.name)
             val value = explicit ?: annotation.findAttributeValue(attribute.name) ?: continue
             // An omitted empty default must not erase a fixed path on the meta-annotation.
             val emptyArray = value is PsiArrayInitializerMemberValue && value.initializers.isEmpty()
             if (explicit == null && (emptyArray || string(value) == "")) continue
-            result = if (target == "method") {
-                val values = (value as? PsiArrayInitializerMemberValue)?.initializers?.toList() ?: listOf(value)
-                result.copy(methods = values.map { it.text.substringAfterLast('.') }.filter { it in SpringRequestMethods.verbs })
-            } else result.copy(paths = pathValues(value))
+            val targetAnnotation = (alias?.findAttributeValue("annotation") as? PsiClassObjectAccessExpression)
+                ?.operand?.type?.canonicalText
+            if (alias == null && target in setOf("value", "path", "method")) conventional[target] = value
+            if (targetAnnotation != null && targetAnnotation != "java.lang.annotation.Annotation") {
+                forwarded.putIfAbsent(targetAnnotation to target, value)
+            }
         }
-        return result
+        val inherited = declaration.annotations.firstNotNullOfOrNull { spring(it, visited + name, forwarded) } ?: return null
+        val path = conventional["path"] ?: conventional["value"]
+        return inherited.copy(
+            paths = path?.let(::pathValues) ?: inherited.paths,
+            methods = conventional["method"]?.let(SpringRequestMethods::values) ?: inherited.methods
+        )
     }
 }

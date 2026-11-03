@@ -1,6 +1,7 @@
 package com.github.jeraxxxxxxx.httpmate.services
 
 import com.intellij.psi.PsiAnnotation
+import com.intellij.psi.PsiAnnotationMemberValue
 import com.intellij.psi.PsiArrayInitializerMemberValue
 
 /** Mirrors Spring's RequestMethodsRequestCondition.combine (a union, not an intersection). */
@@ -10,6 +11,10 @@ internal object SpringRequestMethods {
 
     fun declared(annotation: PsiAnnotation?): List<String> {
         val value = annotation?.findDeclaredAttributeValue("method") ?: return emptyList()
+        return values(value)
+    }
+
+    fun values(value: PsiAnnotationMemberValue): List<String> {
         val values = if (value is PsiArrayInitializerMemberValue) value.initializers.toList() else listOf(value)
         return values.map { it.text.substringAfterLast('.').trim() }.filter { it in verbs }.distinct()
     }

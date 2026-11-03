@@ -427,13 +427,12 @@ internal object FallbackApiParser {
         fun bases(owner: String, visited: Set<String> = emptySet()): List<String> {
             checkCanceled()
             if (owner in visited || visited.size >= 16) return emptyList()
-            jaxRoots[owner]?.let { return it }
-            return locators.filter { locator ->
+            return (jaxRoots[owner].orEmpty() + locators.filter { locator ->
                 val targets = classes.filter { it == locator.target || it.substringAfterLast('.') == locator.target }
                 targets.singleOrNull() == owner
             }.flatMap { locator -> bases(locator.owner, visited + owner).flatMap { base ->
                 locator.paths.map { path -> RestMappingResolver.combine(base, path) }
-            } }.distinct()
+            } }).distinct()
         }
         for ((owner, methods, paths, offset) in jaxEndpoints) {
             for (base in bases(owner)) for (path in paths) for (method in methods) {

@@ -158,9 +158,11 @@ class GenerateDocAction : AnAction() {
 
     private fun buildClassDoc(psiClass: PsiClass): Pair<String, Int>? {
         val className = psiClass.name ?: "Unknown"
-        val methods = psiClass.methods.filter { method ->
+        val methods = psiClass.allMethods.filter { method ->
             ProgressManager.checkCanceled()
-            method.hasModifierProperty(PsiModifier.PUBLIC) && hasRestAnnotation(method)
+            method.hasModifierProperty(PsiModifier.PUBLIC) &&
+                (method.containingClass == psiClass || psiClass.findMethodBySignature(method, true) == method) &&
+                RestMappingResolver.method(method, psiClass)?.let { it.spring || method.containingClass == psiClass } == true
         }
 
         if (methods.isEmpty()) {
@@ -183,15 +185,11 @@ class GenerateDocAction : AnAction() {
                 if (index > 0) {
                     append("\n---\n\n")
                 }
-                append(docGenerator.generate(method))
+                append(docGenerator.generate(method, psiClass))
             }
         }
 
         return content to methods.size
-    }
-
-    private fun hasRestAnnotation(method: PsiMethod): Boolean {
-        return RestMappingResolver.method(method) != null
     }
 
     private fun saveDocToFile(

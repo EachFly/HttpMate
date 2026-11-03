@@ -22,11 +22,11 @@ class DocGenerator {
     private val mockJsonGenerator = MockJsonGenerator()
     private data class DocType(val type: PsiType, val groups: Set<String>)
 
-    fun generate(method: PsiMethod): String {
+    fun generate(method: PsiMethod, owner: PsiClass? = method.containingClass): String {
         ProgressManager.checkCanceled()
-        val className = method.containingClass?.name ?: "Unknown"
-        val mapping = RestMappingResolver.method(method)
-        val paths = mapping?.let { RestMappingResolver.fullPaths(method, it) }.orEmpty()
+        val className = owner?.name ?: "Unknown"
+        val mapping = RestMappingResolver.method(method, owner)
+        val paths = mapping?.let { RestMappingResolver.fullPaths(method, it, owner) }.orEmpty()
         val params = method.parameterList.parameters
         val returnType = responseBodyType(method)
         return buildString {

@@ -76,7 +76,7 @@ class RestApiSearchAction : AnAction() {
                         }
 
                         thisLogger().info("Scanned ${result.size} items")
-                        result
+                        result.distinctBy(RestApiItem::locationKey)
                     } catch (ex: ProcessCanceledException) {
                         throw ex
                     } catch (ex: Exception) {

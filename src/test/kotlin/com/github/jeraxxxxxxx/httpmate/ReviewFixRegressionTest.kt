@@ -120,6 +120,73 @@ class ReviewFixRegressionTest : BasePlatformTestCase() {
         assertTrue(doc.contains("/api/users, /api/people"))
     }
 
+    fun testSpringInterfaceMappingUsesConcreteControllerContext() {
+        spring()
+        add("org/springframework/web/bind/annotation/RestController.java", """
+            package org.springframework.web.bind.annotation;
+            public @interface RestController {}
+        """)
+        val implementations = methods("""
+            package example;
+            import org.springframework.web.bind.annotation.*;
+            @RequestMapping("/api") interface Contract {
+                @GetMapping("/users") String users();
+            }
+            @RestController @RequestMapping("/other") class Other implements Contract {
+                public String users() { return ""; }
+            }
+            @RestController class Controller implements Contract {
+                public String users() { return ""; }
+                @GetMapping("/health") public String health() { return ""; }
+            }
+        """)
+        val scanner = RestApiScanner(project)
+        assertEquals(listOf("/api/health", "/api/users", "/other/users"),
+            scanner.scanBatch(scanner.collectApiCandidates()).map { it.path }.sorted())
+        assertTrue(DocGenerator().generate(implementations.first { it.name == "users" }).contains("/api/users"))
+    }
+
+    fun testTransitiveSpringAliasOverridesIntermediateAttribute() {
+        spring()
+        val endpoint = methods("""
+            package example;
+            import org.springframework.web.bind.annotation.*;
+            import org.springframework.core.annotation.AliasFor;
+            @RequestMapping(path="/fixed", method=RequestMethod.GET)
+            @interface PublicGet {
+                @AliasFor(annotation=RequestMapping.class, attribute="path") String[] routes() default {};
+            }
+            @PublicGet @interface V2Get {
+                @AliasFor(annotation=PublicGet.class, attribute="routes") String[] value() default {};
+            }
+            class Controller {
+                @V2Get("/users") public void users() {}
+                @V2Get public void fixed() {}
+            }
+        """)
+        assertEquals(listOf("/fixed", "/users"), scan(endpoint).map { it.path }.sorted())
+        assertTrue(DocGenerator().generate(endpoint.first { it.name == "users" }).contains("/users"))
+    }
+
+    fun testJaxResourceCanBeBothRootAndLocatorTarget() {
+        jax()
+        val source = """
+            package example;
+            import jakarta.ws.rs.*;
+            @Path("/widgets") class WidgetsResource {
+                @Path("/{id}") public WidgetResource locate() { return new WidgetResource(); }
+            }
+            @Path("/widget") class WidgetResource {
+                @GET public String get() { return ""; }
+            }
+        """.trimIndent()
+        val endpoint = methods(source)
+        val expected = listOf("/widget", "/widgets/{id}")
+        assertEquals(expected, scan(endpoint).map { it.path }.sorted())
+        assertEquals(expected, FallbackApiParser.parse(source).map { it.path }.sorted())
+        assertTrue(DocGenerator().generate(endpoint.single()).contains("/widgets/{id}"))
+    }
+
     fun testNestedComposedMappingRetainsItsFixedPath() {
         spring()
         add("example/First.java", """
