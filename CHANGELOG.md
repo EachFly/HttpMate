@@ -1,13 +1,23 @@
 # HttpMate Changelog
 
-## [Unreleased]
+## [1.2.10] - 2026-11-03
 
 ### Fixed / 修复
+
+- Resolved Spring interface and superclass mappings in the controller context, and followed transitive aliases in composed route annotations.
+- 在实际控制器上下文中解析 Spring 接口和父类映射，并支持组合路由注解中的多层别名。
+- Kept both root and locator routes for JAX-RS resources that serve in both roles.
+- JAX-RS 资源兼作根资源和子资源时，保留两种访问路径。
 
 - Explicitly preserved the version tag when refreshing release drafts, verified tag/build identity after creation and updates, and stopped automatic draft creation when the same version already has an untagged release.
 - 更新发布草稿时显式保留版本标签，创建及更新后校验标签与构建身份；同版本存在 untagged 异常发布记录时停止自动新建草稿。
 - Clarified release validation failures with the actual Git tag and plugin version instead of treating the release title as the tag.
 - 发布校验失败时显示实际 Git 标签和插件版本，明确区分发布标题与标签，不绕过版本一致性检查。
+
+### Changed / 变更
+
+- Updated the Gradle setup action to v6.4.1 across CI workflows.
+- CI 工作流统一升级 Gradle setup Action 至 v6.4.1。
 
 ## [1.2.9] - 2026-11-01
 
