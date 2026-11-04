@@ -9,8 +9,8 @@
 - Kept both root and locator routes for JAX-RS resources that serve in both roles.
 - JAX-RS 资源兼作根资源和子资源时，保留两种访问路径。
 
-- Explicitly preserved the version tag when refreshing release drafts, verified tag/build identity after creation and updates, and stopped automatic draft creation when the same version already has an untagged release.
-- 更新发布草稿时显式保留版本标签，创建及更新后校验标签与构建身份；同版本存在 untagged 异常发布记录时停止自动新建草稿。
+- Tracked release drafts by their API ID, verified the tag and build commit, and repaired untagged drafts only when their automated origin and build identity could be verified.
+- 按 API 返回的 ID 跟踪发布草稿并核对标签和构建提交；仅在能确认自动化来源和构建身份时恢复 untagged 草稿。
 - Clarified release validation failures with the actual Git tag and plugin version instead of treating the release title as the tag.
 - 发布校验失败时显示实际 Git 标签和插件版本，明确区分发布标题与标签，不绕过版本一致性检查。
 

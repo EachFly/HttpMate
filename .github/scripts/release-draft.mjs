@@ -17,14 +17,11 @@ function managedRange(body) {
 }
 
 export function planDraft(releases, version, notes) {
-  // A published placeholder tag must not result in another release for the same version.
-  if (releases.some(release => release.name === version && release.tag_name?.startsWith('untagged-'))) {
-    return { action: 'skip', reason: 'A release with this version title still has an untagged placeholder. Check its Git tag manually; leaving it unchanged.' };
-  }
-  const matches = releases.filter(release => release.tag_name === version);
+  const matches = releases.filter(release => release.tag_name === version ||
+    (release.name === version && release.tag_name?.startsWith('untagged-')));
   const block = `${START}\n${notes.trim()}\n${END}`;
   if (matches.length === 0) return { action: 'create', body: block };
-  if (matches.length !== 1) return { action: 'skip', reason: 'Multiple releases have this tag; leaving them unchanged.' };
+  if (matches.length !== 1) return { action: 'skip', reason: 'Multiple releases match this version; leaving them unchanged.' };
   const release = matches[0];
   if (!release.draft || release.immutable) return { action: 'skip', reason: 'This version is published; leaving it unchanged.' };
   const body = release.body ?? '';
@@ -32,9 +29,15 @@ export function planDraft(releases, version, notes) {
   if (release.author?.login !== 'github-actions[bot]' || !range) {
     return { action: 'skip', reason: 'Existing draft is manual or unmarked; leaving it unchanged.' };
   }
-  const buildMarkers = [...body.matchAll(/<!-- httpmate:build:[0-9a-f]{40} -->/gi)];
+  const buildMarkers = [...body.matchAll(/<!-- httpmate:build:([0-9a-f]{40}) -->/gi)];
   if (buildMarkers.length > 1 || (body.includes('httpmate:build:') && buildMarkers.length !== 1)) {
     return { action: 'skip', reason: 'Build marker is ambiguous or malformed; leaving the draft unchanged.' };
+  }
+  // A title alone cannot identify a draft. Recover only a bot-managed placeholder
+  // whose unique build marker agrees with its stored target.
+  if (release.tag_name !== version &&
+      (buildMarkers.length !== 1 || buildMarkers[0][1] !== release.target_commitish)) {
+    return { action: 'skip', reason: 'Unverified untagged placeholder; leaving it unchanged.' };
   }
   return { action: 'update', id: release.id, body: body.slice(0, range[0]) + block + body.slice(range[1]) };
 }
@@ -122,21 +125,26 @@ export function syncDraft({ version, sha, notes, assets, gh, log = console.log }
   }
   const body = withBuild(plan.body, sha);
   if (plan.action === 'create') {
-    gh(['release', 'create', version, '--target', sha, '--draft', '--title', version, '--notes-file', '-', ...assets.map(asset => asset.path)], body);
-    // A draft's html_url may contain untagged-*; only the API tag_name establishes identity.
-    const createdPages = JSON.parse(gh(['api', '--paginate', '--slurp', 'repos/{owner}/{repo}/releases']));
-    const created = createdPages.flat().filter(release => release.tag_name === version);
-    if (created.length !== 1) throw new Error('Created draft could not be identified by its version tag; inspect it manually before publishing.');
-    const verified = JSON.parse(gh(['api', `repos/{owner}/{repo}/releases/${created[0].id}`]));
-    assertDraftIdentity(verified, version, sha, body);
-  } else {
+    const created = JSON.parse(gh(['api', '--method', 'POST', 'repos/{owner}/{repo}/releases', '--input', '-'],
+      JSON.stringify({ tag_name: version, name: version, target_commitish: sha, body, draft: true })));
+    if (!Number.isSafeInteger(created.id) || created.id <= 0) throw new Error('Create release response did not return a valid ID.');
+    expected = JSON.parse(gh(['api', `repos/{owner}/{repo}/releases/${created.id}`]));
+    if (expected.id !== created.id || expected.name !== version ||
+        expected.author?.login !== 'github-actions[bot]' || !expected.draft || expected.immutable ||
+        expected.body !== body || expected.target_commitish !== sha ||
+        (expected.tag_name !== version && !expected.tag_name?.startsWith('untagged-'))) {
+      throw new Error('Created draft identity verification failed; inspect the release before publishing.');
+    }
+  }
+  {
+    const id = expected.id;
     const assertUnchanged = () => {
-      const live = JSON.parse(gh(['api', `repos/{owner}/{repo}/releases/${plan.id}`]));
+      const live = JSON.parse(gh(['api', `repos/{owner}/{repo}/releases/${id}`]));
       if (!live.draft || live.immutable || metadata(live) !== metadata(expected)) {
         throw new Error('Draft was published or changed during this build; stopping without further writes.');
       }
     };
-    const existing = JSON.parse(gh(['api', '--paginate', '--slurp', `repos/{owner}/{repo}/releases/${plan.id}/assets`])).flat();
+    const existing = JSON.parse(gh(['api', '--paginate', '--slurp', `repos/{owner}/{repo}/releases/${id}/assets`])).flat();
     for (const asset of assets) {
       const matches = existing.filter(item => item.name === asset.name);
       if (matches.length) {
@@ -148,16 +156,17 @@ export function syncDraft({ version, sha, notes, assets, gh, log = console.log }
       assertUnchanged();
       const uploadUrl = expected.upload_url?.replace(/\{.*$/, '');
       if (!uploadUrl || !/^https:\/\/uploads\.github\.com\/repos\/[^/]+\/[^/]+\/releases\/\d+\/assets$/.test(uploadUrl) ||
-          !uploadUrl.endsWith(`/releases/${plan.id}/assets`)) throw new Error('Invalid release upload URL.');
+          !uploadUrl.endsWith(`/releases/${id}/assets`)) throw new Error('Invalid release upload URL.');
       gh(['api', '--method', 'POST', `${uploadUrl}?name=${encodeURIComponent(asset.name)}`, '--header', 'Content-Type: application/zip', '--input', asset.path]);
     }
     assertUnchanged();
     // Never set draft:true: a concurrent publication must not be reverted to a draft.
     // GitHub has no documented atomic "only update if still draft" precondition.
-    if (body !== (expected.body ?? '') || expected.target_commitish !== sha) {
-      const updated = JSON.parse(gh(['api', '--method', 'PATCH', `repos/{owner}/{repo}/releases/${plan.id}`, '--input', '-'],
+    if (expected.tag_name !== version || body !== (expected.body ?? '') || expected.target_commitish !== sha) {
+      const updated = JSON.parse(gh(['api', '--method', 'PATCH', `repos/{owner}/{repo}/releases/${id}`, '--input', '-'],
         JSON.stringify({ tag_name: version, body, target_commitish: sha })));
       assertDraftIdentity(updated, version, sha, body);
+      assertDraftIdentity(JSON.parse(gh(['api', `repos/{owner}/{repo}/releases/${id}`])), version, sha, body);
     }
   }
   log(`Release draft ${plan.action}: ${version}`);

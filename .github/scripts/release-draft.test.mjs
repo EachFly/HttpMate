@@ -21,16 +21,14 @@ function simulate({ releases = [], refs = [], target = sha, assets = [asset], co
   const live = structuredClone(initial);
   const remoteAssets = structuredClone(existing);
   let reads = 0;
-  let created = false;
   const result = syncDraft({ version: '1.2.8', sha: commit, notes: 'new notes', assets, log: () => {},
     gh: (args, input) => {
       calls.push({ args, input });
-      if (args.at(-1) === 'repos/{owner}/{repo}/releases') return JSON.stringify([[], created ? [live] : releases]);
-      if (args[0] === 'release' && args[1] === 'create') {
-        Object.assign(live, { tag_name: args[2], name: args[2], body: input, target_commitish: commit });
+      if (args.at(-1) === 'repos/{owner}/{repo}/releases') return JSON.stringify([[], releases]);
+      if (args.includes('POST') && args[3] === 'repos/{owner}/{repo}/releases') {
+        Object.assign(live, JSON.parse(input));
         onCreate(live);
-        created = true;
-        return 'https://github.com/EachFly/HttpMate/releases/tag/untagged-preview';
+        return JSON.stringify(live);
       }
       if (args.at(-1) === 'repos/{owner}/{repo}/git/matching-refs/tags/') return JSON.stringify([refs]);
       if (args.at(-1).includes('/commits/')) return JSON.stringify({ sha: target });
@@ -58,11 +56,16 @@ function simulate({ releases = [], refs = [], target = sha, assets = [asset], co
 
 test('new draft contains the changelog block and is pinned to the build SHA', () => {
   const { calls } = simulate();
-  const creation = calls.find(call => call.args[0] === 'release' && call.args[1] === 'create');
-  assert.deepEqual(creation.args, ['release', 'create', '1.2.8', '--target', sha, '--draft', '--title', '1.2.8', '--notes-file', '-', asset.path]);
-  assert.ok(creation.input.includes(`<!-- httpmate:build:${sha} -->`));
-  assert.ok(creation.input.includes(name));
-  assert.ok(creation.input.includes(`${START}\nnew notes`));
+  const creation = calls.find(call => call.args.includes('POST'));
+  assert.deepEqual(creation.args, ['api', '--method', 'POST', 'repos/{owner}/{repo}/releases', '--input', '-']);
+  const payload = JSON.parse(creation.input);
+  assert.equal(payload.tag_name, '1.2.8');
+  assert.equal(payload.target_commitish, sha);
+  assert.equal(payload.draft, true);
+  assert.ok(payload.body.includes(`<!-- httpmate:build:${sha} -->`));
+  assert.ok(payload.body.includes(name));
+  assert.ok(payload.body.includes(`${START}\nnew notes`));
+  assert.equal(calls.filter(call => call.args.at(-1) === 'repos/{owner}/{repo}/releases').length, 1);
   assert.equal(calls.at(-1).args[1], 'repos/{owner}/{repo}/releases/42');
 });
 
@@ -141,9 +144,20 @@ test('temporary draft URL is allowed when the actual API tag remains the version
 });
 
 test('creation fails if GitHub does not retain the expected tag or build identity', () => {
-  assert.throws(() => simulate({ onCreate: current => { current.tag_name = 'untagged-wrong'; } }), /could not be identified/);
+  assert.throws(() => simulate({ onCreate: current => { current.tag_name = 'another-version'; } }), /identity verification failed/);
   assert.throws(() => simulate({ onCreate: current => { current.target_commitish = 'b'.repeat(40); } }), /identity verification failed/);
   assert.throws(() => simulate({ onCreate: current => { current.draft = false; } }), /identity verification failed/);
+});
+
+test('repairs a placeholder returned for a newly created managed draft by ID', () => {
+  const { result, live, calls } = simulate({ onCreate: current => { current.tag_name = 'untagged-created'; } });
+  assert.equal(result.action, 'create');
+  assert.equal(live.tag_name, '1.2.8');
+  assert.equal(calls.filter(call => call.args.includes('PATCH')).length, 1);
+  assert.throws(() => simulate({
+    onCreate: current => { current.tag_name = 'untagged-created'; },
+    onPatch: current => { current.tag_name = 'untagged-created'; },
+  }), /identity verification failed/);
 });
 
 test('a successful PATCH response with a changed tag is rejected without rollback', () => {
@@ -158,10 +172,24 @@ test('same-version untagged releases are preserved instead of creating duplicate
     const orphan = { ...draft, tag_name: 'untagged-existing', draft: !published };
     const { result, calls } = simulate({ releases: [orphan] });
     assert.equal(result.action, 'skip');
-    assert.match(result.reason, /untagged placeholder/);
     assert.equal(calls.length, 1);
   }
   assert.equal(simulate({ releases: [{ ...draft, tag_name: 'untagged-old', name: '1.2.7' }] }).result.action, 'create');
+});
+
+test('recovers only a unique managed placeholder with a matching build marker', () => {
+  const orphan = { ...draft, tag_name: 'untagged-existing',
+    body: `<!-- httpmate:build:${draft.target_commitish} -->\n${draft.body}` };
+  const { result, calls, live } = simulate({ releases: [orphan], initial: orphan });
+  assert.equal(result.action, 'update');
+  assert.equal(live.tag_name, '1.2.8');
+  assert.equal(live.target_commitish, sha);
+  assert.ok(live.body.includes('Manual checklist'));
+  assert.equal(calls.some(call => call.args.includes('DELETE')), false);
+  for (const releases of [[orphan, draft], [{ ...orphan, draft: false }],
+    [{ ...orphan, author: { login: 'human' } }], [{ ...orphan, target_commitish: sha }]]) {
+    assert.equal(simulate({ releases }).result.action, 'skip');
+  }
 });
 
 test('losing the tag before the fresh snapshot is safely skipped', () => {

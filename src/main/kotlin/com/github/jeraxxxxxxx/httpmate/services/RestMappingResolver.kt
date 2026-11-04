@@ -37,9 +37,9 @@ internal object RestMappingResolver {
         }
     }
 
-    private fun springClass(owner: PsiClass?): Mapping? = owner?.let {
-        hierarchy(it) { cls -> cls.supers.toList() }.firstNotNullOfOrNull { cls ->
-            cls.annotations.firstNotNullOfOrNull { spring(it) }
+    private fun springClass(owner: PsiClass?): Mapping? = owner?.let { root ->
+        hierarchy(root) { cls -> cls.supers.toList() }.firstNotNullOfOrNull { cls ->
+            cls.annotations.firstNotNullOfOrNull { annotation -> spring(annotation) }
         }
     }
 
