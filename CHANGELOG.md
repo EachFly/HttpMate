@@ -1,5 +1,14 @@
 # HttpMate Changelog
 
+## [1.2.11] - 2026-11-11
+
+### Changed / 变更
+
+- Updated the IntelliJ Platform Gradle plugin from 2.19.0 to 2.20.0.
+- IntelliJ Platform Gradle 插件从 2.19.0 升级至 2.20.0。
+- Updated the Gradle Wrapper from 9.8.2 to 9.9.0 and aligned the wrapper generation setting with the installed version.
+- Gradle Wrapper 从 9.8.2 升级至 9.9.0，同步 Wrapper 生成配置，避免重新生成时退回旧版本。
+
 ## [1.2.10] - 2026-11-03
 
 ### Fixed / 修复
