@@ -440,8 +440,8 @@ internal object FallbackApiParser {
             if (owner in visited) return emptyList()
             if (visited.size >= 16) throw ScanLimitExceeded("Subresource depth exceeded 16. Results are incomplete.")
             val result = jaxRoots[owner].orEmpty().toMutableSet()
-            for (locator in reverseLocators[owner].orEmpty()) {
-                for (base in bases(locator.owner, visited + owner)) for (path in locator.paths) {
+            for ((locatorOwner, _, locatorPaths) in reverseLocators[owner].orEmpty()) {
+                for (base in bases(locatorOwner, visited + owner)) for (path in locatorPaths) {
                     checkCanceled()
                     routeBudget.step()
                     result.add(RestMappingResolver.combine(base, path))

@@ -147,10 +147,10 @@ internal object RestMappingResolver {
             val result = linkedSetOf<String>()
             owner.annotations.firstOrNull { it.qualifiedName in jaxNamespaces.map { ns -> "$ns.Path" } }
                 ?.let { result.addAll(paths(it)) }
-            for (locator in locatorIndex()[owner].orEmpty()) {
+            for ((locatorOwner, locatorPaths) in locatorIndex()[owner].orEmpty()) {
                 ProgressManager.checkCanceled()
-                for (base in bases(locator.owner, visited + owner, budget)) {
-                    for (path in locator.paths) {
+                for (base in bases(locatorOwner, visited + owner, budget)) {
+                    for (path in locatorPaths) {
                         budget.step()
                         result.add(combine(base, path))
                     }

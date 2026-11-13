@@ -62,7 +62,7 @@ class RestApiSearchDialog(
     fun showLoading() {
         loading = true
         stoppedMessage = null
-        setOKActionEnabled(false)
+        isOKActionEnabled = false
         statusLabel.text = HttpMateBundle.message("rest.search.progress.title")
     }
 
@@ -272,7 +272,7 @@ class RestApiSearchDialog(
         if (items.isNotEmpty()) {
             list.selectedIndex = 0
         }
-        setOKActionEnabled(items.isNotEmpty())
+        isOKActionEnabled = items.isNotEmpty()
 
         val countText = if (totalMatches > AppConstants.MAX_SEARCH_RESULTS) {
             HttpMateBundle.message(
