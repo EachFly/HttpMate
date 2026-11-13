@@ -1,5 +1,24 @@
 # HttpMate Changelog
 
+## [Unreleased]
+
+## [1.2.12] - 2026-11-13
+
+### Fixed / 修复
+
+- Open REST search immediately with a loading state and cancel background scanning when the window closes.
+- REST 搜索窗口立即显示加载状态，关闭窗口时取消后台扫描。
+- Reuse inheritance queries across batches and build the JAX-RS locator index once per scan; invalidate scan caches after PSI changes.
+- 扫描批次间复用继承查询，JAX-RS 定位索引每次扫描只构建一次；PSI 变化后使缓存失效，避免过期结果。
+- Reuse the active search window per project, including while a canceled scan is stopping; cache direct inheritance edges and effective method mappings.
+- 每个项目复用已有搜索窗口，取消中的扫描退出前不启动新扫描；复用直接继承关系和实际控制器的方法映射。
+- Skip irrelevant files before loading PSI during fallback scanning and bound retries for files that keep changing.
+- 后备扫描在加载 PSI 前排除无关文件，并限制持续编辑中文件的重试次数。
+- Cancel stale search filtering cooperatively, reuse normalized paths, and rank only the best 50 results while retaining the full match count.
+- 搜索输入变化时及时停止过期过滤，复用路径标准化结果，仅保留排名前 50 项，同时准确显示总匹配数。
+- Bound route expansion and scan result growth, deduplicate incrementally, and explicitly report incomplete scans instead of silently truncating routes.
+- 为路由展开和扫描结果增长增加规模保护、逐步去重；超过限制时明确提示扫描未完成，不静默截断接口。
+
 ## [1.2.11] - 2026-11-11
 
 ### Changed / 变更
