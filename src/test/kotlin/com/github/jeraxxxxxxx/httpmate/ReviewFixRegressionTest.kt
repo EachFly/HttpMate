@@ -187,6 +187,146 @@ class ReviewFixRegressionTest : BasePlatformTestCase() {
         assertTrue(DocGenerator().generate(endpoint.single()).contains("/widgets/{id}"))
     }
 
+    fun testLoadingSearchDialogIsNonModalAndCloseCancelsWork() {
+        var canceled = false
+        val dialog = com.github.jeraxxxxxxx.httpmate.ui.RestApiSearchDialog(project, emptyList()) { canceled = true }
+        try {
+            assertFalse(dialog.isModal)
+            dialog.showLoading()
+            assertFalse(canceled)
+            dialog.setItems(emptyList())
+        } finally {
+            dialog.close(com.intellij.openapi.ui.DialogWrapper.CANCEL_EXIT_CODE)
+        }
+        assertTrue(canceled)
+        // A completion already queued before closure must be harmless.
+        dialog.setItems(emptyList())
+        dialog.scanStopped("Canceled")
+    }
+
+    fun testInheritorQueriesAreReusedAcrossScanBatches() {
+        spring()
+        val endpoints = methods("package example; class Controller {" +
+            (1..240).joinToString("\n") {
+                "@org.springframework.web.bind.annotation.GetMapping(\"/p$it\") public void get$it() {}"
+            } + "}")
+        val scanner = RestApiScanner(project)
+        val pointers = endpoints.map { SmartPointerManager.createPointer(it) }
+        val results = pointers.chunked(20).flatMap(scanner::scanBatch)
+        assertEquals(240, results.size)
+        assertEquals("One hierarchy query per owner, not per batch", 1, scanner.inheritorQueries)
+        add("example/Changed.java", "package example; class Changed {}")
+        scanner.scanBatch(pointers.take(1))
+        assertEquals("PSI changes must invalidate session caches", 2, scanner.inheritorQueries)
+    }
+
+    fun testJaxLocatorIndexIsBuiltOnceAcrossBatchesAndInvalidated() {
+        jax()
+        val endpoints = methods("""
+            package example;
+            import jakarta.ws.rs.*;
+            @Path("/root") class Root {
+                @Path("/child") public Child child() { return null; }
+            }
+            @Path("/direct") class Child {
+                @GET @Path("/a") public String a() { return ""; }
+                @GET @Path("/b") public String b() { return ""; }
+            }
+        """)
+        val scanner = RestApiScanner(project)
+        val pointers = endpoints.map { SmartPointerManager.createPointer(it) }
+        val result = pointers.flatMap { scanner.scanBatch(listOf(it)) }.map { it.path }.toSet()
+        assertEquals(setOf("/direct/a", "/direct/b", "/root/child/a", "/root/child/b"), result)
+        assertEquals(1, scanner.locatorIndexBuilds)
+        add("example/OtherRoot.java", """
+            package example;
+            @jakarta.ws.rs.Path("/other") class OtherRoot {
+                @jakarta.ws.rs.Path("/child") public Child child() { return null; }
+            }
+        """)
+        assertTrue(scanner.scanBatch(pointers).any { it.path == "/other/child/a" })
+        assertEquals(1, scanner.locatorIndexBuilds)
+    }
+
+    fun testFinalControllersDoNotQueryInheritors() {
+        spring()
+        val scanner = RestApiScanner(project)
+        val endpoints = methods("""
+            package example;
+            final class Controller {
+                @org.springframework.web.bind.annotation.GetMapping("/a") public void a() {}
+            }
+        """)
+        assertEquals(1, scanner.scanBatch(endpoints.map { SmartPointerManager.createPointer(it) }).size)
+        assertEquals(0, scanner.inheritorQueries)
+    }
+
+    fun testOverlappingHierarchiesReuseEdgesAndEffectiveMappings() {
+        spring()
+        add("org/springframework/web/bind/annotation/RestController.java", """
+            package org.springframework.web.bind.annotation; public @interface RestController {}
+        """)
+        add("example/Controllers.java", """
+            package example;
+            import org.springframework.web.bind.annotation.*;
+            interface Contract { @GetMapping("/route") void get(); }
+            abstract class Middle implements Contract { @GetMapping("/route") public void get() {} }
+            @RestController @RequestMapping("/leaf") final class Leaf extends Middle {
+                @GetMapping("/route") public void get() {}
+            }
+        """)
+        val scanner = RestApiScanner(project)
+        val candidates = scanner.collectApiCandidates()
+        val result = candidates.flatMap { scanner.scanBatch(listOf(it)) }
+        assertEquals(setOf("/leaf/route"), result.map { it.path }.toSet())
+        assertEquals("Each non-final class edge is queried once", 2, scanner.inheritorQueries)
+        assertEquals("Shared leaf method is resolved only once", 3, scanner.methodResolutions)
+        val resolutions = scanner.methodResolutions
+        assertEquals(result.map { it.locationKey() }.toSet(), scanner.scanBatch(candidates).map { it.locationKey() }.toSet())
+        assertEquals("Retrying a batch retains its results without repeating resolution", resolutions, scanner.methodResolutions)
+    }
+
+    fun testSearchSessionPreventsReopeningUntilCanceledWorkerFinishes() {
+        val session = com.github.jeraxxxxxxx.httpmate.actions.RestSearchSession.acquire(project)!!
+        val indicator = com.intellij.openapi.progress.EmptyProgressIndicator()
+        session.indicator.set(indicator)
+        try {
+            assertNull(com.github.jeraxxxxxxx.httpmate.actions.RestSearchSession.acquire(project))
+            session.close(project)
+            assertTrue(indicator.isCanceled)
+            assertNull(com.github.jeraxxxxxxx.httpmate.actions.RestSearchSession.acquire(project))
+        } finally {
+            session.close(project)
+            session.finish(project)
+        }
+        val next = com.github.jeraxxxxxxx.httpmate.actions.RestSearchSession.acquire(project)!!
+        next.finish(project)
+        assertSame(next, com.github.jeraxxxxxxx.httpmate.actions.RestSearchSession.current(project))
+        next.close(project)
+        assertNull(com.github.jeraxxxxxxx.httpmate.actions.RestSearchSession.current(project))
+    }
+
+    fun testDirectInheritanceCacheKeepsKotlinImplementations() {
+        spring()
+        add("org/springframework/web/bind/annotation/RestController.java", """
+            package org.springframework.web.bind.annotation; public @interface RestController {}
+        """)
+        add("example/Contract.java", """
+            package example;
+            public interface Contract {
+                @org.springframework.web.bind.annotation.GetMapping("/route") void get();
+            }
+        """)
+        add("example/Controllers.kt", """
+            package example
+            import org.springframework.web.bind.annotation.*
+            open class Middle : Contract { override fun get() {} }
+            @RestController @RequestMapping("/kotlin") class Leaf : Middle()
+        """)
+        val scanner = RestApiScanner(project)
+        assertEquals(listOf("/kotlin/route"), scanner.scanBatch(scanner.collectApiCandidates()).map { it.path })
+    }
+
     fun testNestedComposedMappingRetainsItsFixedPath() {
         spring()
         add("example/First.java", """

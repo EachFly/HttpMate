@@ -2,6 +2,7 @@ package com.github.jeraxxxxxxx.httpmate.services
 
 import com.github.jeraxxxxxxx.httpmate.constants.RestAnnotations
 import com.intellij.openapi.progress.ProgressManager
+import com.intellij.openapi.project.Project
 import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.PsiAnnotation
 import com.intellij.psi.PsiAnnotationMemberValue
@@ -58,11 +59,11 @@ internal object RestMappingResolver {
         }
     }
 
-    fun method(method: PsiMethod, owner: PsiClass? = method.containingClass): Mapping? {
+    fun method(method: PsiMethod, owner: PsiClass? = method.containingClass, context: ScanContext? = null): Mapping? {
         hierarchy(method) { it.findSuperMethods().toList() }.firstNotNullOfOrNull { declaration ->
             declaration.annotations.firstNotNullOfOrNull { spring(it) }
         }?.let { mapping ->
-            val classMapping = springClass(owner)
+            val classMapping = if (context == null) springClass(owner) else context.springMapping(owner)
             return mapping.copy(methods = SpringRequestMethods.combine(classMapping?.methods.orEmpty(), mapping.methods))
         }
         val verbs = method.annotations.mapNotNull { annotation ->
@@ -85,35 +86,87 @@ internal object RestMappingResolver {
     }
 
     fun fullPaths(method: PsiMethod, mapping: Mapping, owner: PsiClass? = method.containingClass): List<String> =
-        (if (mapping.spring) classPaths(owner) else jaxBasePaths(owner))
-            .flatMap { base -> mapping.paths.map { combine(base, it) } }.distinct()
+        fullPaths(mapping, if (mapping.spring) classPaths(owner) else ScanContext(method.project).jaxPaths(owner))
 
-    private fun jaxBasePaths(owner: PsiClass?, visited: Set<PsiClass> = emptySet()): List<String> {
-        if (owner == null || owner in visited || visited.size >= 16) return emptyList()
-        val result = mutableListOf<String>()
-        owner.annotations.firstOrNull { it.qualifiedName in jaxNamespaces.map { ns -> "$ns.Path" } }
-            ?.let { result.addAll(paths(it)) }
-        val facade = JavaPsiFacade.getInstance(owner.project)
-        for (namespace in jaxNamespaces) {
-            val pathClass = facade.findClass("$namespace.Path", GlobalSearchScope.allScope(owner.project)) ?: continue
-            AnnotatedElementsSearch.searchPsiMethods(pathClass, GlobalSearchScope.projectScope(owner.project)).forEach(Processor { locator ->
-                ProgressManager.checkCanceled()
-                if (method(locator) == null && locator.returnType?.let(PsiTypesUtil::getPsiClass) == owner) {
-                    val annotation = locator.getAnnotation("$namespace.Path")
-                    if (annotation != null) {
-                        for (base in jaxBasePaths(locator.containingClass, visited + owner)) {
-                            paths(annotation).mapTo(result) { combine(base, it) }
-                        }
-                    }
-                }
-                true
-            })
+    fun fullPaths(mapping: Mapping, bases: List<String>): List<String> {
+        val budget = RouteBudget()
+        val paths = linkedSetOf<String>()
+        for (base in bases) for (path in mapping.paths) {
+            budget.step()
+            paths.add(combine(base, path))
         }
-        return result.distinct()
+        return paths.toList()
     }
 
-    fun combine(base: String, path: String): String =
-        "/" + listOf(base, path).map { it.trim().trim('/') }.filter { it.isNotEmpty() }.joinToString("/")
+    /** Read-action confined; the scanner discards this context after any PSI modification. */
+    class ScanContext(private val project: Project) {
+        private data class Locator(val owner: PsiClass?, val paths: List<String>)
+        private var locators: Map<PsiClass, List<Locator>>? = null
+        private val roots = mutableMapOf<PsiClass, List<String>>()
+        private val springClasses = mutableMapOf<PsiClass?, Mapping?>()
+        internal var locatorIndexBuilds = 0
+            private set
+
+        fun springMapping(owner: PsiClass?): Mapping? {
+            if (!springClasses.containsKey(owner)) springClasses[owner] = springClass(owner)
+            return springClasses[owner]
+        }
+
+        private fun locatorIndex(): Map<PsiClass, List<Locator>> {
+            locators?.let { return it }
+            val result = mutableMapOf<PsiClass, MutableList<Locator>>()
+            val facade = JavaPsiFacade.getInstance(project)
+            for (namespace in jaxNamespaces) {
+                val pathClass = facade.findClass("$namespace.Path", GlobalSearchScope.allScope(project)) ?: continue
+                AnnotatedElementsSearch.searchPsiMethods(pathClass, GlobalSearchScope.projectScope(project)).forEach(Processor { locator ->
+                    ProgressManager.checkCanceled()
+                    if (method(locator) == null) {
+                        val target = locator.returnType?.let(PsiTypesUtil::getPsiClass)
+                        val annotation = locator.getAnnotation("$namespace.Path")
+                        if (target != null && annotation != null) {
+                            result.getOrPut(target) { mutableListOf() }.add(Locator(locator.containingClass, paths(annotation)))
+                        }
+                    }
+                    true
+                })
+            }
+            locatorIndexBuilds++
+            locators = result
+            return result
+        }
+
+        fun jaxPaths(owner: PsiClass?): List<String> = owner?.let {
+            roots.getOrPut(it) { bases(it, emptySet(), RouteBudget()) }
+        }.orEmpty()
+
+        // Only top-level answers are cached: cycle-pruned recursive answers depend on visited.
+        private fun bases(owner: PsiClass?, visited: Set<PsiClass>, budget: RouteBudget): List<String> {
+            budget.step()
+            if (owner == null || owner in visited) return emptyList()
+            if (visited.size >= 16) throw ScanLimitExceeded("Subresource depth exceeded 16. Results are incomplete.")
+            val result = linkedSetOf<String>()
+            owner.annotations.firstOrNull { it.qualifiedName in jaxNamespaces.map { ns -> "$ns.Path" } }
+                ?.let { result.addAll(paths(it)) }
+            for (locator in locatorIndex()[owner].orEmpty()) {
+                ProgressManager.checkCanceled()
+                for (base in bases(locator.owner, visited + owner, budget)) {
+                    for (path in locator.paths) {
+                        budget.step()
+                        result.add(combine(base, path))
+                    }
+                }
+            }
+            return result.toList()
+        }
+    }
+
+    fun combine(base: String, path: String): String {
+        ProgressManager.checkCanceled()
+        if (base.length.toLong() + path.length > 16_384) {
+            throw ScanLimitExceeded("Route length exceeded 16384 characters. Results are incomplete.")
+        }
+        return "/" + listOf(base, path).map { it.trim().trim('/') }.filter { it.isNotEmpty() }.joinToString("/")
+    }
 
     fun string(value: PsiAnnotationMemberValue?): String? {
         if (value == null) return null
@@ -143,6 +196,8 @@ internal object RestMappingResolver {
     ): Mapping? {
         ProgressManager.checkCanceled()
         val name = annotation.qualifiedName ?: return null
+        // Standard meta-annotations cannot contain a Spring mapping.
+        if (name.startsWith("java.lang.annotation.")) return null
         if (name in visited || visited.size >= 32) return null
         if (name == SpringRequestMethods.ANNOTATION || name in springVerbs) {
             val methods = springVerbs[name]?.let(::listOf)

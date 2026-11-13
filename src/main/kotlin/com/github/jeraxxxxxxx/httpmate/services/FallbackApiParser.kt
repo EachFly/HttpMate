@@ -75,7 +75,8 @@ internal object FallbackApiParser {
         resolveExpression: (Int, Int) -> String? = { _, _ -> null }
     ): List<Endpoint> {
         val tokens = tokenize(text, checkCanceled)
-        val endpoints = mutableListOf<Endpoint>()
+        val endpoints = linkedSetOf<Endpoint>()
+        val routeBudget = RouteBudget()
         data class Locator(val owner: String, val target: String, val paths: List<String>)
         data class JaxEndpoint(val owner: String, val methods: List<String>, val paths: List<String>, val offset: Int)
         val locators = mutableListOf<Locator>()
@@ -342,8 +343,9 @@ internal object FallbackApiParser {
                 return
             }
             for (base in classPaths) for (path in paths) for (method in effectiveMethods) {
-                val segments = listOf(base, path).map { it.trim().trim('/') }.filter { it.isNotEmpty() }
-                endpoints += Endpoint(method, "/" + segments.joinToString("/"), mapping.offset)
+                checkCanceled()
+                routeBudget.step()
+                endpoints += Endpoint(method, RestMappingResolver.combine(base, path), mapping.offset)
             }
         }
 
@@ -424,22 +426,38 @@ internal object FallbackApiParser {
         }
 
         scanRegion(0, tokens.size, listOf(""), emptyList())
+        val classesBySimpleName = classes.groupBy { it.substringAfterLast('.') }
+        val reverseLocators = mutableMapOf<String, MutableList<Locator>>()
+        for (locator in locators) {
+            checkCanceled()
+            val targets = (classesBySimpleName[locator.target].orEmpty() +
+                listOfNotNull(locator.target.takeIf { it in classes })).distinct()
+            targets.singleOrNull()?.let { reverseLocators.getOrPut(it) { mutableListOf() }.add(locator) }
+        }
         fun bases(owner: String, visited: Set<String> = emptySet()): List<String> {
             checkCanceled()
-            if (owner in visited || visited.size >= 16) return emptyList()
-            return (jaxRoots[owner].orEmpty() + locators.filter { locator ->
-                val targets = classes.filter { it == locator.target || it.substringAfterLast('.') == locator.target }
-                targets.singleOrNull() == owner
-            }.flatMap { locator -> bases(locator.owner, visited + owner).flatMap { base ->
-                locator.paths.map { path -> RestMappingResolver.combine(base, path) }
-            } }).distinct()
+            routeBudget.step()
+            if (owner in visited) return emptyList()
+            if (visited.size >= 16) throw ScanLimitExceeded("Subresource depth exceeded 16. Results are incomplete.")
+            val result = jaxRoots[owner].orEmpty().toMutableSet()
+            for (locator in reverseLocators[owner].orEmpty()) {
+                for (base in bases(locator.owner, visited + owner)) for (path in locator.paths) {
+                    checkCanceled()
+                    routeBudget.step()
+                    result.add(RestMappingResolver.combine(base, path))
+                }
+            }
+            return result.toList()
         }
+        val rootPaths = mutableMapOf<String, List<String>>()
         for ((owner, methods, paths, offset) in jaxEndpoints) {
-            for (base in bases(owner)) for (path in paths) for (method in methods) {
+            for (base in rootPaths.getOrPut(owner) { bases(owner) }) for (path in paths) for (method in methods) {
+                checkCanceled()
+                routeBudget.step()
                 endpoints += Endpoint(method, RestMappingResolver.combine(base, path), offset)
             }
         }
-        return endpoints.distinct()
+        return endpoints.toList()
     }
 
     private fun tokenize(text: String, checkCanceled: () -> Unit): List<Token> {

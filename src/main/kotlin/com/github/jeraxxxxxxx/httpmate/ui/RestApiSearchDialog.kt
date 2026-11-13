@@ -31,22 +31,65 @@ import javax.swing.event.DocumentEvent
  * REST API 搜索对话框
  * 提供快速搜索和导航到 API 定义的功能
  */
-class RestApiSearchDialog(private val project: Project, private val allItems: List<RestApiItem>) :
+class RestApiSearchDialog(
+    private val project: Project,
+    private var allItems: List<RestApiItem>,
+    private val onClose: () -> Unit = {}
+) :
     DialogWrapper(project) {
 
     private val listModel = javax.swing.DefaultListModel<RestApiItem>()
     private val list = JBList(listModel)
     private val searchField = SearchTextField()
     private var currentQuery: String = ""
+    private var loading = false
+    private var stoppedMessage: String? = null
     private val filterGeneration = AtomicLong()
+    @Volatile
+    private var searchIndex: Pair<List<RestApiItem>, RestSearchIndex<RestApiItem>>? = null
+    private class StaleSearch : RuntimeException()
 
     private val searchAlarm = com.intellij.util.Alarm(com.intellij.util.Alarm.ThreadToUse.POOLED_THREAD, disposable)
     private val statusLabel = javax.swing.JLabel()
 
     init {
+        isModal = false
         init()
         title = HttpMateBundle.message("rest.search.title")
         updateList(allItems)
+    }
+
+    fun showLoading() {
+        loading = true
+        stoppedMessage = null
+        setOKActionEnabled(false)
+        statusLabel.text = HttpMateBundle.message("rest.search.progress.title")
+    }
+
+    fun setItems(items: List<RestApiItem>) {
+        if (isDisposed) return
+        loading = false
+        stoppedMessage = null
+        // The scan hands over an immutable snapshot; do not copy large lists on the EDT.
+        allItems = items
+        searchIndex = null
+        filter(searchField.text)
+    }
+
+    fun scanStopped(message: String) {
+        if (isDisposed) return
+        loading = false
+        stoppedMessage = message
+        filterGeneration.incrementAndGet()
+        searchAlarm.cancelAllRequests()
+        statusLabel.text = message
+    }
+
+    override fun dispose() {
+        filterGeneration.incrementAndGet()
+        searchIndex = null
+        onClose()
+        super.dispose()
     }
 
     override fun getDimensionServiceKey(): String {
@@ -199,84 +242,53 @@ class RestApiSearchDialog(private val project: Project, private val allItems: Li
 
     private fun filter(text: String) {
         val generation = filterGeneration.incrementAndGet()
+        val snapshot = allItems
+        val modality = com.intellij.openapi.application.ModalityState.stateForComponent(list)
         searchAlarm.cancelAllRequests()
         searchAlarm.addRequest({
-            val query = text.trim().lowercase()
-            val filtered = if (query.isEmpty()) {
-                allItems
-            } else {
-                allItems.mapNotNull { item ->
-                    val pathScore = calculateMatchScore(query, item.path.lowercase())
-
-                    if (pathScore >= 0) Pair(item, pathScore) else null
-                }
-                .sortedByDescending { it.second }
-                .map { it.first }
-            }
+            val isCurrent = { generation == filterGeneration.get() }
+            val index = searchIndex?.takeIf { it.first === snapshot }?.second ?: try {
+                RestSearchIndex(snapshot) {
+                    if (!isCurrent()) throw StaleSearch()
+                    it.path
+                }.also { if (isCurrent()) searchIndex = snapshot to it }
+            } catch (_: StaleSearch) { return@addRequest }
+            val filtered = index.search(text, AppConstants.MAX_SEARCH_RESULTS, isCurrent) ?: return@addRequest
 
             ApplicationManager.getApplication().invokeLater({
                 if (!isDisposed && generation == filterGeneration.get()) {
                     currentQuery = text.trim()
-                    updateList(filtered)
+                    updateList(filtered.items, filtered.total)
                     list.repaint()
                 }
-            }, com.intellij.openapi.application.ModalityState.stateForComponent(list))
+            }, modality)
         }, AppConstants.SEARCH_DEBOUNCE_MS.toLong())
     }
 
-    private fun calculateMatchScore(query: String, target: String): Int {
-        if (query.isEmpty()) return 0
-        
-        if (target == query) return 100
-        if (target.startsWith(query)) return 80
-        
-        val index = target.indexOf(query)
-        if (index >= 0) {
-            return 70 - index.coerceAtMost(20)
-        }
-        
-        if (isSubsequence(query, target)) {
-            return 20
-        }
-        
-        return -1
-    }
-
-    private fun isSubsequence(query: String, target: String): Boolean {
-        if (query.isEmpty()) return true
-        var i = 0
-        var j = 0
-        while (i < query.length && j < target.length) {
-            if (query[i] == target[j]) {
-                i++
-            }
-            j++
-        }
-        return i == query.length
-    }
-
-    private fun updateList(items: List<RestApiItem>) {
+    private fun updateList(items: List<RestApiItem>, totalMatches: Int = items.size) {
         listModel.clear()
         items.take(AppConstants.MAX_SEARCH_RESULTS).forEach { listModel.addElement(it) }
 
         if (items.isNotEmpty()) {
             list.selectedIndex = 0
         }
+        setOKActionEnabled(items.isNotEmpty())
 
-        val countText = if (items.size > AppConstants.MAX_SEARCH_RESULTS) {
+        val countText = if (totalMatches > AppConstants.MAX_SEARCH_RESULTS) {
             HttpMateBundle.message(
                 "rest.search.status.limited",
-                items.size,
+                totalMatches,
                 AppConstants.MAX_SEARCH_RESULTS,
                 allItems.size
             )
         } else {
-            HttpMateBundle.message("rest.search.status.full", items.size, allItems.size)
+            HttpMateBundle.message("rest.search.status.full", totalMatches, allItems.size)
         }
-        statusLabel.text = countText
+        statusLabel.text = stoppedMessage ?: if (loading) HttpMateBundle.message("rest.search.progress.title") else countText
     }
 
     override fun doOKAction() {
+        if (list.selectedValue == null) return
         val selected = list.selectedValue
         if (selected != null) {
             val element = ApplicationManager.getApplication().runReadAction(Computable {

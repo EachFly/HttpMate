@@ -16,6 +16,8 @@ import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.DumbService
 import com.intellij.openapi.ui.Messages
 import java.util.concurrent.Callable
+import com.github.jeraxxxxxxx.httpmate.services.ScanLimitExceeded
+import com.github.jeraxxxxxxx.httpmate.services.ScanResultLimit
 
 /**
  * REST API 搜索 Action
@@ -30,6 +32,12 @@ class RestApiSearchAction : AnAction() {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
         thisLogger().info("RestApiSearchAction triggered")
+        RestSearchSession.current(project)?.let { existing ->
+            if (!existing.closed) existing.focus() else Messages.showInfoMessage(
+                project, HttpMateBundle.message("rest.search.canceling"), HttpMateBundle.message("rest.search.title")
+            )
+            return
+        }
 
         if (DumbService.isDumb(project)) {
             Messages.showWarningDialog(
@@ -40,18 +48,35 @@ class RestApiSearchAction : AnAction() {
             return
         }
 
+        val session = RestSearchSession.acquire(project) ?: return
+        val dialog = RestApiSearchDialog(project, emptyList()) { session.close(project) }
+        session.focus = { dialog.window?.toFront(); dialog.preferredFocusedComponent.requestFocusInWindow() }
+        dialog.showLoading()
+        dialog.show()
         ProgressManager.getInstance()
             .run(object : Task.Backgroundable(project, HttpMateBundle.message("rest.search.progress.title"), true) {
                 override fun run(indicator: ProgressIndicator) {
+                    session.indicator.set(indicator)
+                    if (dialog.isDisposed) indicator.cancel()
+                    indicator.checkCanceled()
                     indicator.isIndeterminate = false
+                    val started = System.nanoTime()
 
                     val items = try {
                         val scanner = RestApiScanner(project)
                         val candidates = ReadAction.nonBlocking(Callable {
                             scanner.collectApiCandidates()
                         }).inSmartMode(project).expireWith(project).executeSynchronously()
+                        thisLogger().info("REST candidate collection: ${candidates.size} candidates, ${(System.nanoTime() - started) / 1_000_000} ms")
 
-                        val result = mutableListOf<RestApiItem>()
+                        val result = linkedMapOf<List<Any?>, RestApiItem>()
+                        fun addResults(items: List<RestApiItem>) {
+                            for (item in items) {
+                                indicator.checkCanceled()
+                                result.putIfAbsent(item.locationKey(), item)
+                                ScanResultLimit.checkSize(result.size.toLong())
+                            }
+                        }
                         val batches = candidates.chunked(200)
                         val totalBatches = batches.size.coerceAtLeast(1)
 
@@ -62,9 +87,9 @@ class RestApiSearchAction : AnAction() {
                                 HttpMateBundle.message("rest.search.progress.batch", index + 1, totalBatches)
                             indicator.fraction = (index + 1).toDouble() / totalBatches
 
-                            result += ReadAction.nonBlocking(Callable {
+                            addResults(ReadAction.nonBlocking(Callable {
                                 scanner.scanBatch(batch)
-                            }).inSmartMode(project).expireWith(project).executeSynchronously()
+                            }).inSmartMode(project).expireWith(project).executeSynchronously())
                         }
 
                         if (result.isEmpty()) {
@@ -72,16 +97,23 @@ class RestApiSearchAction : AnAction() {
                             indicator.text2 = HttpMateBundle.message("rest.search.progress.files")
                             thisLogger().info("Standard scan returned 0 items. Trying fallback scan.")
                             result.clear()
-                            result.addAll(scanner.scanFallback())
+                            addResults(scanner.scanFallback())
                         }
 
-                        thisLogger().info("Scanned ${result.size} items")
-                        result.distinctBy(RestApiItem::locationKey)
+                        thisLogger().info("Scanned ${result.size} items in ${(System.nanoTime() - started) / 1_000_000} ms")
+                        result.values.toList()
+                    } catch (ex: ScanLimitExceeded) {
+                        ProjectBackgroundWork.later(project, indicator) {
+                            dialog.scanStopped(ex.message ?: "Scan limit exceeded; results are incomplete.")
+                        }
+                        return
                     } catch (ex: ProcessCanceledException) {
                         throw ex
                     } catch (ex: Exception) {
                         thisLogger().error("Error during REST API scan", ex)
                         ProjectBackgroundWork.later(project, indicator) {
+                            if (dialog.isDisposed) return@later
+                            dialog.scanStopped(HttpMateBundle.message("rest.search.error.title"))
                             Messages.showErrorDialog(
                                 project,
                                 HttpMateBundle.message("rest.search.error.message", ex.message ?: "Unknown error"),
@@ -92,8 +124,16 @@ class RestApiSearchAction : AnAction() {
                     }
 
                     ProjectBackgroundWork.later(project, indicator) {
-                        RestApiSearchDialog(project, items).show()
+                        dialog.setItems(items)
                     }
+                }
+
+                override fun onCancel() {
+                    dialog.scanStopped(HttpMateBundle.message("rest.search.canceled"))
+                }
+
+                override fun onFinished() {
+                    session.finish(project)
                 }
             })
     }

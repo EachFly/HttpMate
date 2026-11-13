@@ -7,6 +7,17 @@ import org.junit.Test
 
 class FallbackApiParserTest {
     @Test
+    fun excessiveSubresourceDepthIsReportedInsteadOfSilentlyReturningNoRoutes() {
+        val source = "@Path(\"/root\") " + (0..17).joinToString("\n") { i ->
+            if (i == 17) "class R$i { @GET public void get() {} }"
+            else "class R$i { @Path(\"/next\") public R${i + 1} next() { return null; } }"
+        }
+        org.junit.Assert.assertThrows(com.github.jeraxxxxxxx.httpmate.services.ScanLimitExceeded::class.java) {
+            FallbackApiParser.parse(source)
+        }
+    }
+
+    @Test
     fun methodMappingWithoutClassMappingIsNotSkipped() {
         val text = """class Users {
             @RequestMapping("/users") public String users() { return ""; }

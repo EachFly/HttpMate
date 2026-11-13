@@ -16,10 +16,13 @@ import com.intellij.psi.SmartPointerManager
 import com.intellij.psi.SmartPsiElementPointer
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.searches.AnnotatedElementsSearch
-import com.intellij.psi.search.searches.ClassInheritorsSearch
+import com.intellij.psi.search.searches.DirectClassInheritorsSearch
+import com.intellij.openapi.fileEditor.FileDocumentManager
+import com.intellij.openapi.fileEditor.impl.LoadTextUtil
 import com.intellij.psi.PsiModifier
 import com.intellij.psi.PsiClass
 import com.intellij.psi.util.PsiTreeUtil
+import com.intellij.psi.util.PsiModificationTracker
 import com.intellij.util.Processor
 
 /**
@@ -27,6 +30,34 @@ import com.intellij.util.Processor
  * 扫描项目中的 Spring Boot 和 JAX-RS REST API 定义
  */
 class RestApiScanner(private val project: Project) {
+    private var modificationCount = -1L
+    private val implementations = mutableMapOf<PsiClass, List<PsiClass>>()
+    private val directChildren = mutableMapOf<PsiClass, List<PsiClass>>()
+    private val resolvedMethods = mutableMapOf<Pair<PsiMethod, PsiClass?>, RestMappingResolver.Mapping?>()
+    private val resolvedItems = mutableMapOf<Pair<PsiMethod, PsiClass?>, List<RestApiItem>>()
+    private var cachedItemCount = 0L
+    internal var methodResolutions = 0
+        private set
+    private val controllerKinds = mutableMapOf<PsiClass, Boolean>()
+    private val springPaths = mutableMapOf<PsiClass?, List<String>>()
+    private var mappings = RestMappingResolver.ScanContext(project)
+    internal var inheritorQueries = 0
+        private set
+    internal val locatorIndexBuilds: Int get() = mappings.locatorIndexBuilds
+
+    private fun refreshCaches() {
+        val current = PsiModificationTracker.getInstance(project).modificationCount
+        if (current == modificationCount) return
+        implementations.clear()
+        directChildren.clear()
+        resolvedMethods.clear()
+        resolvedItems.clear()
+        cachedItemCount = 0
+        controllerKinds.clear()
+        springPaths.clear()
+        mappings = RestMappingResolver.ScanContext(project)
+        modificationCount = current
+    }
 
     /**
      * 扫描项目中的所有 REST API
@@ -76,49 +107,99 @@ class RestApiScanner(private val project: Project) {
     }
 
     fun scanBatch(candidates: List<SmartPsiElementPointer<PsiMethod>>): List<RestApiItem> {
+        refreshCaches()
         val items = mutableListOf<RestApiItem>()
-        val implementations = mutableMapOf<PsiClass, List<PsiClass>>()
         val scope = GlobalSearchScope.projectScope(project)
+        // Per-attempt only: a restarted read action must still produce its complete batch.
+        val emitted = mutableSetOf<Pair<PsiMethod, PsiClass?>>()
+        fun emit(method: PsiMethod, mapping: RestMappingResolver.Mapping, owner: PsiClass?) {
+            if (emitted.add(method to owner)) appendItems(items, method, mapping, owner)
+        }
 
         for (candidate in candidates) {
             ProgressManager.checkCanceled()
             val method = candidate.element ?: continue
-            val mapping = RestMappingResolver.method(method) ?: continue
             val owner = method.containingClass
+            val mapping = resolveMethod(method, owner) ?: continue
             if (!mapping.spring || owner == null || method.hasModifierProperty(PsiModifier.PRIVATE) ||
                 method.hasModifierProperty(PsiModifier.STATIC)) {
-                appendItems(items, method, mapping, owner)
+                emit(method, mapping, owner)
                 continue
             }
             val controllers = implementations.getOrPut(owner) {
-                ClassInheritorsSearch.search(owner, scope, true).findAll().filter(::isConcreteController)
+                val queue = ArrayDeque(listOf(owner))
+                val visited = mutableSetOf(owner)
+                val descendants = mutableListOf<PsiClass>()
+                while (queue.isNotEmpty()) {
+                    ProgressManager.checkCanceled()
+                    val parent = queue.removeFirst()
+                    val children = directChildren.getOrPut(parent) {
+                        if (parent.hasModifierProperty(PsiModifier.FINAL)) emptyList() else {
+                            inheritorQueries++
+                            DirectClassInheritorsSearch.search(parent, scope).findAll().toList()
+                        }
+                    }
+                    for (child in children) if (visited.add(child)) {
+                        queue.add(child)
+                        if (isConcreteController(child)) descendants.add(child)
+                    }
+                }
+                descendants
             }
             var foundImplementation = false
             for (controller in controllers) {
                 ProgressManager.checkCanceled()
                 val implementation = controller.findMethodBySignature(method, true) ?: continue
-                val effective = RestMappingResolver.method(implementation, controller) ?: continue
+                val effective = resolveMethod(implementation, controller) ?: continue
                 if (!effective.spring) continue
-                appendItems(items, implementation, effective, controller)
+                emit(implementation, effective, controller)
                 foundImplementation = true
             }
-            if (!foundImplementation || isConcreteController(owner)) appendItems(items, method, mapping, owner)
+            if (!foundImplementation || isConcreteController(owner)) emit(method, mapping, owner)
         }
         return items.distinctBy(RestApiItem::locationKey)
     }
 
+    private fun resolveMethod(method: PsiMethod, owner: PsiClass?): RestMappingResolver.Mapping? {
+        val key = method to owner
+        if (!resolvedMethods.containsKey(key)) {
+            val mapping = RestMappingResolver.method(method, owner, mappings)
+            resolvedMethods[key] = mapping
+            methodResolutions++
+        }
+        return resolvedMethods[key]
+    }
+
     private fun isConcreteController(owner: PsiClass): Boolean =
-        !owner.isInterface && !owner.hasModifierProperty(PsiModifier.ABSTRACT) &&
-            RestMappingResolver.isSpringController(owner)
+        controllerKinds.getOrPut(owner) {
+            !owner.isInterface && !owner.hasModifierProperty(PsiModifier.ABSTRACT) &&
+                RestMappingResolver.isSpringController(owner)
+        }
 
     private fun appendItems(
         items: MutableList<RestApiItem>, method: PsiMethod, mapping: RestMappingResolver.Mapping, owner: PsiClass?
     ) {
+        val resolved = resolvedItems.getOrPut(method to owner) {
+            buildItems(method, mapping, owner).also {
+                ScanResultLimit.checkSize(cachedItemCount + it.size)
+                cachedItemCount += it.size
+            }
+        }
+        ScanResultLimit.checkSize(items.size.toLong() + resolved.size)
+        items.addAll(resolved)
+    }
+
+    private fun buildItems(method: PsiMethod, mapping: RestMappingResolver.Mapping, owner: PsiClass?): List<RestApiItem> {
+        val items = mutableListOf<RestApiItem>()
         val navigationElement = method.navigationElement.takeIf(PsiElement::isValid) ?: method
         val pointer = SmartPointerManager.createPointer(navigationElement)
 
-        for (fullPath in RestMappingResolver.fullPaths(method, mapping, owner)) {
+        val bases = if (mapping.spring) springPaths.getOrPut(owner) { RestMappingResolver.classPaths(owner) }
+            else mappings.jaxPaths(owner)
+        for (fullPath in RestMappingResolver.fullPaths(mapping, bases)) {
             for (httpMethod in mapping.methods.ifEmpty { listOf("ALL") }) {
+                ProgressManager.checkCanceled()
+                ScanResultLimit.checkSize(items.size.toLong() + 1)
                 items.add(
                     RestApiItem(
                         method = httpMethod,
@@ -133,6 +214,7 @@ class RestApiScanner(private val project: Project) {
                 )
             }
         }
+        return items
     }
 
     /**
@@ -150,13 +232,24 @@ class RestApiScanner(private val project: Project) {
         for (virtualFile in allFiles) {
             ProgressManager.checkCanceled()
             // If a write invalidates a snapshot, retry this file rather than attach stale offsets.
-            while (true) {
+            var completed = false
+            for (attempt in 1..3) {
                 ProgressManager.checkCanceled()
                 val snapshot = readModel {
                     if (!virtualFile.isValid) return@readModel null
+                    val text = FileDocumentManager.getInstance().getCachedDocument(virtualFile)?.immutableCharSequence
+                        ?: LoadTextUtil.loadText(virtualFile)
+                    if (!FallbackScanPolicy.mightContainRoutes(text)) return@readModel null
+                    if (text.length > FallbackScanPolicy.MAX_FILE_CHARS) {
+                        throw ScanLimitExceeded("Fallback scan file is too large: ${virtualFile.name}. Results are incomplete.")
+                    }
                     val file = psiManager.findFile(virtualFile) ?: return@readModel null
                     file.text to file.modificationStamp
-                } ?: break
+                }
+                if (snapshot == null) {
+                    completed = true
+                    break
+                }
                 val endpoints = FallbackApiParser.parse(snapshot.first, ProgressManager::checkCanceled) { start, end ->
                     if (virtualFile.extension != "java") null else readModel {
                         val file = psiManager.findFile(virtualFile) ?: return@readModel null
@@ -174,6 +267,7 @@ class RestApiScanner(private val project: Project) {
                     val file = psiManager.findFile(virtualFile) ?: return@readModel emptyList()
                     if (file.modificationStamp != snapshot.second) return@readModel null
                     endpoints.map { endpoint ->
+                        ProgressManager.checkCanceled()
                         RestApiItem(
                             method = endpoint.method,
                             path = endpoint.path,
@@ -184,9 +278,14 @@ class RestApiScanner(private val project: Project) {
                         )
                     }
                 } ?: continue
+                ScanResultLimit.checkSize(items.size.toLong() + fileItems.size)
                 items.addAll(fileItems)
+                completed = true
                 break
             }
+            if (!completed) throw ScanLimitExceeded(
+                "File kept changing during fallback scan: ${virtualFile.name}. Results are incomplete; retry after editing."
+            )
         }
 
         thisLogger().info("Fallback scan found ${items.size} items")
